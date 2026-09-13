@@ -20,6 +20,8 @@ fun main() {
 }
 
 fun Application.module() {
+    val geminiService = GeminiService()
+
     install(CallLogging)
     install(ContentNegotiation) {
         json(Json {
@@ -37,6 +39,8 @@ fun Application.module() {
         get("/ready") {
             call.respond(HealthResponse(status = "ready"))
         }
+
+        aiRoutes(geminiService)
     }
 }
 
