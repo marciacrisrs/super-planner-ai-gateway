@@ -24,6 +24,7 @@ dependencies {
     implementation("io.ktor:ktor-server-call-logging-jvm")
     implementation("io.ktor:ktor-server-status-pages-jvm")
     implementation("io.ktor:ktor-server-auth-jvm")
+    implementation("com.google.genai:google-genai:1.71.0")
     implementation("ch.qos.logback:logback-classic:1.5.18")
     testImplementation("io.ktor:ktor-server-test-host-jvm")
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")
