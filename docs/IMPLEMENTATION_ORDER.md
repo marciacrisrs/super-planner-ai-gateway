@@ -1,0 +1,1 @@
+Implement in dependency order: provider-independent proposal contract; security and limits; observability/error handling; natural language proposal; contextual explanation; planning commands; planning insights; preference inference; scenario interpretation; next-action recommendation.
