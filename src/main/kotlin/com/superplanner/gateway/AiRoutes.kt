@@ -26,13 +26,13 @@ fun Route.aiRoutes(
     post("/v1/ai/generate") {
         if (!security.requireAccess(call)) return@post
         val requestId = GatewaySecurity.requestId(call)
+        call.response.headers.append("X-Request-Id", requestId)
         val started = System.nanoTime()
         try {
             val request = call.receive<GenerateAiRequest>()
             require(request.prompt.isNotBlank()) { "prompt must not be blank" }
             require(request.prompt.length <= MAX_PROMPT_LENGTH) { "prompt exceeds maximum length" }
             val text = withAiTimeout(AI_TIMEOUT_MS) { aiTextGenerator.generate(request.prompt) }
-            call.response.headers.append("X-Request-Id", requestId)
             call.respond(GenerateAiResponse(text, aiTextGenerator.modelName))
             GatewayObservability.success(requestId, "generate", aiTextGenerator.modelName, started)
         } catch (e: IllegalArgumentException) {
@@ -50,12 +50,12 @@ fun Route.aiRoutes(
     post("/v1/ai/propose") {
         if (!security.requireAccess(call)) return@post
         val requestId = GatewaySecurity.requestId(call)
+        call.response.headers.append("X-Request-Id", requestId)
         val started = System.nanoTime()
         try {
             val request = call.receive<AiProposalRequest>()
             require(request.message.length <= MAX_PROMPT_LENGTH) { "message exceeds maximum length" }
             val response = withAiTimeout(AI_TIMEOUT_MS) { aiProposalService.propose(request, requestId) }
-            call.response.headers.append("X-Request-Id", requestId)
             call.respond(response)
             GatewayObservability.success(requestId, "propose", response.model, started)
         } catch (e: InvalidAiProposalException) {
@@ -76,11 +76,11 @@ fun Route.aiRoutes(
     post("/v1/ai/organize-week") {
         if (!security.requireAccess(call)) return@post
         val requestId = GatewaySecurity.requestId(call)
+        call.response.headers.append("X-Request-Id", requestId)
         val started = System.nanoTime()
         try {
             val request = call.receive<OrganizeWeekRequest>()
             val response = withAiTimeout(AI_TIMEOUT_MS) { organizeWeekService.organize(request) }
-            call.response.headers.append("X-Request-Id", requestId)
             call.respond(response)
             GatewayObservability.success(requestId, "organize-week", response.model, started)
         } catch (e: InvalidOrganizeWeekException) {
@@ -147,9 +147,9 @@ private suspend fun ApplicationCall.capabilityRoute(
     block: suspend (String) -> AiCapabilityResponse,
 ) {
     val requestId = GatewaySecurity.requestId(this)
+    response.headers.append("X-Request-Id", requestId)
     val started = System.nanoTime()
     try {
-        response.headers.append("X-Request-Id", requestId)
         val result = withAiTimeout(AI_TIMEOUT_MS) { block(requestId) }
         respond(result)
         GatewayObservability.success(requestId, capability, result.model, started)
