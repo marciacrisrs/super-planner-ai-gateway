@@ -61,6 +61,25 @@ class OrganizeWeekService(
             val end = parseTime(item.endTime, "endTime")
             require(start.isBefore(end)) { "proposed item endTime must be after startTime" }
         }
+
+        val fixedProposals = request.fixedCommitments.associateBy { it.id }
+        response.proposedItems.forEach { proposed ->
+            fixedProposals[proposed.id]?.let { fixed ->
+                return@forEach
+            }
+            val proposedStart = parseTime(proposed.startTime, "startTime")
+            val proposedEnd = parseTime(proposed.endTime, "endTime")
+            request.fixedCommitments
+                .filter { it.date == proposed.date && it.startTime != null && it.endTime != null }
+                .forEach { fixed ->
+                    val fixedStart = parseTime(fixed.startTime!!, "fixed startTime")
+                    val fixedEnd = parseTime(fixed.endTime!!, "fixed endTime")
+                    require(proposedEnd <= fixedStart || proposedStart >= fixedEnd) {
+                        "proposal ${proposed.id} overlaps fixed commitment ${fixed.id}"
+                    }
+                }
+        }
+
         response.conflicts.forEach { conflict ->
             require(conflict.severity in ALLOWED_SEVERITIES) { "unsupported conflict severity" }
             require(conflict.affectedItemIds.distinct().size == conflict.affectedItemIds.size) { "conflict affected ids must be unique" }
