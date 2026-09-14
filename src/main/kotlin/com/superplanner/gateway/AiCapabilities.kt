@@ -75,7 +75,7 @@ class AiCapabilityService(
             Never modify planning rules or commitments. Return ONLY JSON:
             {"insights":[{"title":string,"description":string,"evidence":[string],"confidence":"HIGH|MEDIUM|LOW"}],"recommendations":[string]}
             Request: ${json.encodeToString(InsightRequest.serializer(), request)}
-        """.trimIndent(), ::validateInsights)
+        """.trimIndent(), { result -> validateInsights(result, request.evidence, request.sampleSize) })
     }
 
     fun preference(request: PreferenceRequest, requestId: String): AiCapabilityResponse {
@@ -201,9 +201,7 @@ class AiCapabilityService(
                 requireString(payload, "title")
                 val allowed = setOf("title", "date", "startTime", "durationMinutes", "recurrence")
                 require(payload.keys.all { it in allowed }) { "CREATE_ACTIVITY_DRAFT contains unsupported fields" }
-                listOf("date", "startTime", "recurrence").forEach { key ->
-                    if (payload.containsKey(key)) requireString(payload, key)
-                }
+                listOf("date", "startTime", "recurrence").forEach { key -> if (payload.containsKey(key)) requireString(payload, key) }
                 if (payload.containsKey("durationMinutes")) requirePositiveInteger(payload, "durationMinutes")
             }
             "CHANGE_ACTIVITY" -> {
@@ -216,7 +214,6 @@ class AiCapabilityService(
                 require(payload.isNotEmpty()) { "REORGANIZE_DAY payload must not be empty" }
                 val allowed = setOf("date", "reason", "constraints")
                 require(payload.keys.all { it in allowed }) { "REORGANIZE_DAY contains unsupported fields" }
-                require(payload.keys.any { it in allowed }) { "REORGANIZE_DAY requires planning context" }
                 if (payload.containsKey("date")) requireString(payload, "date")
                 if (payload.containsKey("reason")) requireString(payload, "reason")
                 if (payload.containsKey("constraints")) requireStringArray(payload, "constraints")
@@ -229,7 +226,7 @@ class AiCapabilityService(
         }
     }
 
-    private fun validateInsights(result: JsonObject) {
+    private fun validateInsights(result: JsonObject, suppliedEvidence: List<String>, sampleSize: Int) {
         val insights = result["insights"] as? JsonArray ?: throw IllegalArgumentException("insights must be an array")
         insights.forEach { item ->
             val obj = item as? JsonObject ?: throw IllegalArgumentException("each insight must be an object")
@@ -237,6 +234,11 @@ class AiCapabilityService(
             requireString(obj, "description")
             requireStringArray(obj, "evidence")
             requireEnum(obj, "confidence", CONFIDENCE)
+            val evidence = (obj["evidence"] as JsonArray).map { (it as JsonPrimitive).content }
+            require(evidence.all { it in suppliedEvidence }) { "insight references evidence not supplied by the domain" }
+            if (sampleSize < MIN_INSIGHT_SAMPLE_SIZE) {
+                require((obj["confidence"] as JsonPrimitive).content == "LOW") { "insights from insufficient samples must use LOW confidence" }
+            }
         }
         requireStringArray(result, "recommendations")
     }
@@ -310,6 +312,7 @@ class AiCapabilityService(
     companion object {
         private const val MAX_INPUT_LENGTH = 12000
         private const val MAX_LIST_ITEMS = 100
+        private const val MIN_INSIGHT_SAMPLE_SIZE = 3
         private val CONFIDENCE = setOf("HIGH", "MEDIUM", "LOW")
         private val COMMANDS = setOf("MARK_DELAYED", "CANCEL_ACTIVITY", "CREATE_ACTIVITY_DRAFT", "CHANGE_ACTIVITY", "REORGANIZE_DAY", "MISSING_INFORMATION")
     }
