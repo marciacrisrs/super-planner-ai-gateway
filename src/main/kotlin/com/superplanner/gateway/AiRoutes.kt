@@ -19,7 +19,10 @@ data class GenerateAiResponse(
     val model: String
 )
 
-fun Route.aiRoutes(geminiService: GeminiService) {
+fun Route.aiRoutes(
+    geminiService: GeminiService,
+    organizeWeekService: OrganizeWeekService
+) {
     post("/v1/ai/generate") {
         val request = call.receive<GenerateAiRequest>()
         if (request.prompt.isBlank()) {
@@ -34,5 +37,11 @@ fun Route.aiRoutes(geminiService: GeminiService) {
                 model = geminiService.modelName
             )
         )
+    }
+
+    post("/v1/ai/organize-week") {
+        val request = call.receive<OrganizeWeekRequest>()
+        val response = organizeWeekService.organize(request)
+        call.respond(response)
     }
 }
