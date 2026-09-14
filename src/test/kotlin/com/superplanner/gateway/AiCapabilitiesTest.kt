@@ -28,7 +28,7 @@ class AiCapabilitiesTest {
     @Test
     fun contextual_explanation_cannot_cite_unsupplied_evidence() {
         val service = AiCapabilityService(FakeGenerator("""{"explanation":"x","evidenceUsed":["fact-invented"],"confidence":"HIGH"}"""))
-        assertFailsWith<Exception> {
+        assertFailsWith<InvalidAiCapabilityException> {
             service.explanation(ExplanationRequest(question = "por quê?", evidence = listOf("fact-real")), "req-evidence")
         }
     }
@@ -43,7 +43,7 @@ class AiCapabilitiesTest {
     @Test
     fun contextual_explanation_with_no_evidence_cannot_claim_high_confidence() {
         val service = AiCapabilityService(FakeGenerator("""{"explanation":"x","evidenceUsed":[],"confidence":"HIGH"}"""))
-        assertFailsWith<Exception> {
+        assertFailsWith<InvalidAiCapabilityException> {
             service.explanation(ExplanationRequest(question = "por quê?"), "req-insufficient-high")
         }
     }
@@ -51,7 +51,7 @@ class AiCapabilitiesTest {
     @Test
     fun invalid_json_is_rejected() {
         val service = AiCapabilityService(FakeGenerator("not-json"))
-        assertFailsWith<Exception> {
+        assertFailsWith<InvalidAiCapabilityException> {
             service.nextAction(NextActionRequest(), "req-2")
         }
     }
@@ -63,11 +63,11 @@ class AiCapabilitiesTest {
                 """{"recommendedAction":"blocked","reason":"reason","alternatives":["a","b"],"confidence":"HIGH"}""",
             ),
         )
-        assertFailsWith<IllegalArgumentException> {
+        assertFailsWith<InvalidAiCapabilityException> {
             service.nextAction(NextActionRequest(candidates = listOf("a", "b")), "req-3")
         }
 
-        assertFailsWith<IllegalArgumentException> {
+        assertFailsWith<InvalidAiCapabilityException> {
             AiCapabilityService(FakeGenerator("""{"recommendedAction":"a","reason":"reason","alternatives":["b","c","a"],"confidence":"HIGH"}""")).nextAction(
                 NextActionRequest(candidates = listOf("a", "b", "c")), "req-4",
             )
@@ -83,22 +83,22 @@ class AiCapabilitiesTest {
 
     @Test
     fun each_capability_rejects_malformed_contracts() {
-        assertFailsWith<IllegalArgumentException> {
+        assertFailsWith<InvalidAiCapabilityException> {
             AiCapabilityService(FakeGenerator("""{"commandType":"CREATE_ACTIVITY_DRAFT","explanation":"x","requiresConfirmation":true,"payload":{},"missingFields":[]}""")).naturalLanguage(
                 NaturalLanguageRequest(message = "criar"), "req-nl",
             )
         }
-        assertFailsWith<IllegalArgumentException> {
+        assertFailsWith<InvalidAiCapabilityException> {
             AiCapabilityService(FakeGenerator("""{"explanation":"x","evidenceUsed":[],"confidence":"UNKNOWN"}""")).explanation(
                 ExplanationRequest(question = "por quê?"), "req-exp",
             )
         }
-        assertFailsWith<IllegalArgumentException> {
+        assertFailsWith<InvalidAiCapabilityException> {
             AiCapabilityService(FakeGenerator("""{"commandType":"UNKNOWN","requiresConfirmation":true,"payload":{},"explanation":"x"}""")).command(
                 CommandRequest(message = "fazer algo"), "req-cmd",
             )
         }
-        assertFailsWith<IllegalArgumentException> {
+        assertFailsWith<InvalidAiCapabilityException> {
             AiCapabilityService(FakeGenerator("""{"insights":[{"title":"x","description":"y","evidence":[],"confidence":"HIGH"}],"recommendations":[1]}""")).insight(
                 InsightRequest(), "req-ins",
             )
@@ -108,7 +108,7 @@ class AiCapabilitiesTest {
                 PreferenceRequest(schemaVersion = "2"), "req-pref",
             )
         }
-        assertFailsWith<IllegalArgumentException> {
+        assertFailsWith<InvalidAiCapabilityException> {
             AiCapabilityService(FakeGenerator("""{"scenario":"x","changes":[],"assumptions":[],"requiresClarification":"false"}""")).scenario(
                 ScenarioRequest(question = "e se?"), "req-scenario",
             )
@@ -118,10 +118,38 @@ class AiCapabilitiesTest {
     @Test
     fun command_requires_confirmation_for_mutations() {
         val service = AiCapabilityService(
-            FakeGenerator("""{"commandType":"CHANGE_ACTIVITY","requiresConfirmation":false,"payload":{},"explanation":"x"}"""),
+            FakeGenerator("""{"commandType":"CHANGE_ACTIVITY","requiresConfirmation":false,"payload":{"activityId":"a1","changes":{"title":"novo"}},"explanation":"x"}"""),
         )
-        assertFailsWith<IllegalArgumentException> {
+        assertFailsWith<InvalidAiCapabilityException> {
             service.command(CommandRequest(message = "mude"), "req-command")
+        }
+    }
+
+    @Test
+    fun planning_command_payloads_are_strict_and_typed() {
+        val cases = listOf(
+            """{"commandType":"MARK_DELAYED","requiresConfirmation":true,"payload":{"activityId":"a1","delayMinutes":40},"explanation":"atraso"}""" to true,
+            """{"commandType":"CANCEL_ACTIVITY","requiresConfirmation":true,"payload":{"activityId":"a1"},"explanation":"cancelar"}""" to true,
+            """{"commandType":"CREATE_ACTIVITY_DRAFT","requiresConfirmation":true,"payload":{"title":"Academia","date":"2026-09-14","startTime":"16:00","durationMinutes":60},"explanation":"incluir"}""" to true,
+            """{"commandType":"CHANGE_ACTIVITY","requiresConfirmation":true,"payload":{"activityId":"a1","changes":{"title":"Academia"}},"explanation":"alterar"}""" to true,
+            """{"commandType":"REORGANIZE_DAY","requiresConfirmation":true,"payload":{"date":"2026-09-14","reason":"atraso"},"explanation":"reorganizar"}""" to true,
+            """{"commandType":"MISSING_INFORMATION","requiresConfirmation":false,"payload":{"missingFields":["activityId"]},"explanation":"faltam dados"}""" to true,
+            """{"commandType":"MARK_DELAYED","requiresConfirmation":true,"payload":{"activityId":"a1"},"explanation":"faltando delay"}""" to false,
+            """{"commandType":"CANCEL_ACTIVITY","requiresConfirmation":true,"payload":{"activityId":"a1","reason":"x"},"explanation":"campo extra"}""" to false,
+            """{"commandType":"CHANGE_ACTIVITY","requiresConfirmation":true,"payload":{"activityId":"a1","changes":{}},"explanation":"sem mudanças"}""" to false,
+            """{"commandType":"MISSING_INFORMATION","requiresConfirmation":false,"payload":{},"explanation":"faltam dados"}""" to false,
+        )
+
+        cases.forEachIndexed { index, (json, valid) ->
+            val service = AiCapabilityService(FakeGenerator(json))
+            if (valid) {
+                val response = service.command(CommandRequest(message = "pedido"), "req-command-$index")
+                assertEquals(json.substringAfter("\"commandType\":\"").substringBefore("\""), response.result["commandType"]?.toString()?.trim('"'))
+            } else {
+                assertFailsWith<InvalidAiCapabilityException> {
+                    service.command(CommandRequest(message = "pedido"), "req-command-$index")
+                }
+            }
         }
     }
 
@@ -132,7 +160,7 @@ class AiCapabilitiesTest {
                 """{"commandType":"CREATE_ACTIVITY_DRAFT","explanation":"criar","requiresConfirmation":false,"payload":{"title":"Estudar"},"inferredFields":[],"missingFields":[]}""",
             ),
         )
-        assertFailsWith<IllegalArgumentException> {
+        assertFailsWith<InvalidAiCapabilityException> {
             service.naturalLanguage(NaturalLanguageRequest(message = "criar estudo"), "req-nl-confirmation")
         }
     }
