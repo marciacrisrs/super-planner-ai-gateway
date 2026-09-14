@@ -1,5 +1,6 @@
 package com.superplanner.gateway
 
+import java.time.LocalTime
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
@@ -11,16 +12,85 @@ class OrganizeWeekService(
     fun organize(request: OrganizeWeekRequest): OrganizeWeekResponse {
         require(request.weekStart.isNotBlank()) { "weekStart must not be blank" }
         require(request.timezone.isNotBlank()) { "timezone must not be blank" }
+        validateInput(request)
 
         val raw = aiTextGenerator.generate(buildPrompt(request))
         val jsonObject = parseJsonObject(raw)
 
         return try {
-            json.decodeFromJsonElement(OrganizeWeekResponse.serializer(), jsonObject)
-                .copy(model = aiTextGenerator.modelName)
+            val response = json.decodeFromJsonElement(OrganizeWeekResponse.serializer(), jsonObject)
+            validateResponse(request, response)
+            response.copy(model = aiTextGenerator.modelName)
+        } catch (exception: IllegalArgumentException) {
+            throw IllegalStateException("AI returned an invalid organize-week proposal", exception)
         } catch (exception: Exception) {
             throw IllegalStateException("AI returned an invalid organize-week proposal", exception)
         }
+    }
+
+    private fun validateInput(request: OrganizeWeekRequest) {
+        request.existingPlan.validatePlanItems("existingPlan")
+        request.fixedCommitments.validatePlanItems("fixedCommitments")
+        request.desires.validatePlanItems("desires")
+        require(request.aiTips.size <= MAX_LIST_ITEMS) { "aiTips has too many items" }
+        request.aiTips.forEach { require(it.length <= MAX_STRING_LENGTH) { "aiTips contains an oversized item" } }
+        request.logistics.forEach {
+            require(it.minutes >= 0) { "logistics minutes must be non-negative" }
+            require(it.type.isNotBlank()) { "logistics type must not be blank" }
+        }
+        request.capacity?.let { capacity ->
+            require(capacity.totalCapacityMinutes >= 0)
+            require(capacity.totalDesiredMinutes >= 0)
+            require(capacity.totalRemainingMinutes >= 0)
+            capacity.days.forEach {
+                require(it.schedulableMinutes >= 0)
+                require(it.desiredMinutes >= 0)
+                require(it.remainingMinutes >= 0)
+            }
+        }
+    }
+
+    private fun validateResponse(request: OrganizeWeekRequest, response: OrganizeWeekResponse) {
+        val proposedIds = response.proposedItems.map { it.id }
+        require(proposedIds.all(String::isNotBlank)) { "proposed item ids must not be blank" }
+        require(proposedIds.distinct().size == proposedIds.size) { "proposed item ids must be unique" }
+        response.proposedItems.forEach { item ->
+            require(item.title.isNotBlank()) { "proposed item title must not be blank" }
+            require(item.source in ALLOWED_SOURCES) { "unsupported proposal source" }
+            val start = parseTime(item.startTime, "startTime")
+            val end = parseTime(item.endTime, "endTime")
+            require(start.isBefore(end)) { "proposed item endTime must be after startTime" }
+        }
+        response.conflicts.forEach { conflict ->
+            require(conflict.severity in ALLOWED_SEVERITIES) { "unsupported conflict severity" }
+            require(conflict.affectedItemIds.distinct().size == conflict.affectedItemIds.size) { "conflict affected ids must be unique" }
+        }
+        request.fixedCommitments.forEach { fixed ->
+            val proposed = response.proposedItems.find { it.id == fixed.id }
+                ?: throw IllegalArgumentException("fixed commitment ${fixed.id} was omitted")
+            require(proposed.fixed) { "fixed commitment ${fixed.id} lost fixed=true" }
+            require(proposed.title == fixed.title) { "fixed commitment ${fixed.id} title was changed" }
+            require(proposed.date == fixed.date) { "fixed commitment ${fixed.id} date was changed" }
+            require(proposed.startTime == fixed.startTime) { "fixed commitment ${fixed.id} startTime was changed" }
+            require(proposed.endTime == fixed.endTime) { "fixed commitment ${fixed.id} endTime was changed" }
+        }
+    }
+
+    private fun List<PlanItem>.validatePlanItems(name: String) {
+        require(size <= MAX_LIST_ITEMS) { "$name has too many items" }
+        val ids = map { it.id }
+        require(ids.none(String::isBlank)) { "$name contains a blank id" }
+        require(ids.distinct().size == ids.size) { "$name ids must be unique" }
+        forEach {
+            require(it.title.length <= MAX_STRING_LENGTH) { "$name contains an oversized title" }
+            it.durationMinutes?.let { minutes -> require(minutes > 0) { "$name duration must be positive" } }
+        }
+    }
+
+    private fun parseTime(value: String, field: String): LocalTime = try {
+        LocalTime.parse(value)
+    } catch (exception: Exception) {
+        throw IllegalArgumentException("invalid $field")
     }
 
     private fun buildPrompt(request: OrganizeWeekRequest): String = """
@@ -110,5 +180,12 @@ class OrganizeWeekService(
         } catch (exception: Exception) {
             throw IllegalStateException("AI returned non-JSON organize-week output", exception)
         }
+    }
+
+    companion object {
+        private const val MAX_LIST_ITEMS = 100
+        private const val MAX_STRING_LENGTH = 12_000
+        private val ALLOWED_SOURCES = setOf("existing", "fixed", "desire", "logistics", "ai_suggestion")
+        private val ALLOWED_SEVERITIES = setOf("low", "medium", "high")
     }
 }
