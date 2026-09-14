@@ -103,6 +103,29 @@ class AiCapabilitiesTest {
     }
 
     @Test
+    fun natural_language_mutation_requires_confirmation() {
+        val service = AiCapabilityService(
+            FakeGenerator(
+                """{"commandType":"CREATE_ACTIVITY_DRAFT","explanation":"criar","requiresConfirmation":false,"payload":{"title":"Estudar"},"inferredFields":[],"missingFields":[]}""",
+            ),
+        )
+        assertFailsWith<IllegalArgumentException> {
+            service.naturalLanguage(NaturalLanguageRequest(message = "criar estudo"), "req-nl-confirmation")
+        }
+    }
+
+    @Test
+    fun natural_language_missing_information_does_not_require_confirmation() {
+        val service = AiCapabilityService(
+            FakeGenerator(
+                """{"commandType":"MISSING_INFORMATION","explanation":"faltam dados","requiresConfirmation":false,"payload":{},"inferredFields":[],"missingFields":["date"]}""",
+            ),
+        )
+        val response = service.naturalLanguage(NaturalLanguageRequest(message = "criar algo"), "req-nl-missing")
+        assertEquals("MISSING_INFORMATION", response.result["commandType"]?.toString()?.trim('"'))
+    }
+
+    @Test
     fun oversized_inputs_are_rejected_before_generation() {
         var generated = false
         val generator = object : AiTextGenerator {
