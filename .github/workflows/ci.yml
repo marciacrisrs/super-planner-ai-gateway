@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   test:
-    name: Test and coverage
+    name: Lint, test and coverage
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -24,8 +24,8 @@ jobs:
           java-version: '21'
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@4c125117fe7c5aed11272ec4213f602f012f89f2 # v5
-      - name: Test and verify coverage
-        run: gradle test jacocoTestReport jacocoTestCoverageVerification --no-daemon
+      - name: Lint, test and verify coverage
+        run: gradle ktlintCheck test jacocoTestReport jacocoTestCoverageVerification --no-daemon
         env:
           ENVIRONMENT: test
           GOOGLE_CLOUD_PROJECT: test-project
