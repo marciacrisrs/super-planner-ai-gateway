@@ -9,12 +9,11 @@ group = "com.superplanner"
 version = "0.1.0"
 
 application {
-    mainClass.set("com.superplanner.gateway.ApplicationKt")
+    mainClass.set("io.ktor.server.netty.EngineMain")
 }
 
 dependencies {
     implementation("io.ktor:ktor-server-core-jvm")
-    implementation("io.ktor:ktor-server-engine-jvm")
     implementation("io.ktor:ktor-server-netty-jvm")
     implementation("io.ktor:ktor-server-content-negotiation-jvm")
     implementation("io.ktor:ktor-serialization-kotlinx-json-jvm")
