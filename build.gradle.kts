@@ -2,6 +2,7 @@ plugins {
     kotlin("jvm") version "2.2.20"
     kotlin("plugin.serialization") version "2.2.20"
     id("io.ktor.plugin") version "3.2.3"
+    id("org.jlleitschuh.gradle.ktlint") version "14.2.0"
     jacoco
     application
 }
@@ -29,6 +30,11 @@ dependencies {
 
 kotlin {
     jvmToolchain(21)
+}
+
+ktlint {
+    version.set("1.6.0")
+    ignoreFailures.set(false)
 }
 
 jacoco {
@@ -64,5 +70,5 @@ tasks.jacocoTestCoverageVerification {
 }
 
 tasks.check {
-    dependsOn(tasks.jacocoTestCoverageVerification)
+    dependsOn(tasks.jacocoTestCoverageVerification, tasks.ktlintCheck)
 }
