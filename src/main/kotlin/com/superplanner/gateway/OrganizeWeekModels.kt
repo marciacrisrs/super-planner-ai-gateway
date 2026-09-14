@@ -33,7 +33,6 @@ data class LogisticConstraint(
     val minutes: Int,
     val beforeItemId: String? = null,
     val afterItemId: String? = null,
-    val beforeItemId: String? = null,
     val origin: String? = null,
     val destination: String? = null,
     val required: Boolean = true
