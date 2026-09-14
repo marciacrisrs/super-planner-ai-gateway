@@ -42,6 +42,37 @@ class OrganizeWeekSemanticValidationTest {
     }
 
     @Test
+    fun `proposal cannot overlap a fixed commitment`() {
+        val fixed = PlanItem("work", "Trabalho", "2026-09-14", "09:00", "18:00", required = true)
+        val response = responseWith(
+            ProposedPlanItem("gym", "Academia", "2026-09-14", "17:00", "18:30", "desire")
+        )
+        assertFailsWith<IllegalStateException> {
+            OrganizeWeekService(FakeAi(response)).organize(
+                OrganizeWeekRequest("2026-09-14", "America/Sao_Paulo", fixedCommitments = listOf(fixed))
+            )
+        }
+    }
+
+    @Test
+    fun `proposal outside fixed commitment window is accepted`() {
+        val fixed = PlanItem("work", "Trabalho", "2026-09-14", "09:00", "18:00", required = true)
+        val result = OrganizeWeekService(
+            FakeAi(responseWith(ProposedPlanItem("gym", "Academia", "2026-09-14", "07:00", "08:00", "desire")))
+        ).organize(
+            OrganizeWeekRequest(
+                "2026-09-14",
+                "America/Sao_Paulo",
+                fixedCommitments = listOf(
+                    fixed,
+                    PlanItem("prep", "Preparação", "2026-09-14", "07:00", "08:00")
+                )
+            )
+        )
+        assertEquals("gym", result.proposedItems.single().id)
+    }
+
+    @Test
     fun `valid fixed commitment and proposal are accepted`() {
         val fixed = PlanItem("work", "Trabalho", "2026-09-14", "09:00", "18:00", required = true)
         val result = OrganizeWeekService(
