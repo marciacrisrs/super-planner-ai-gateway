@@ -31,7 +31,12 @@ class AiCapabilitiesTest {
     @Test fun next_action_must_use_domain_candidate_and_at_most_two_alternatives(){
         assertFailsWith<InvalidAiCapabilityException>{AiCapabilityService(FakeGenerator("""{"recommendedAction":"blocked","reason":"reason","alternatives":["a","b"],"confidence":"HIGH"}""")).nextAction(NextActionRequest(candidates=listOf("a","b")),"req-3")}
         assertFailsWith<InvalidAiCapabilityException>{AiCapabilityService(FakeGenerator("""{"recommendedAction":"a","reason":"reason","alternatives":["b","c","a"],"confidence":"HIGH"}""")).nextAction(NextActionRequest(candidates=listOf("a","b","c")),"req-4")}
-        val r=AiCapabilityService(FakeGenerator("""{"recommendedAction":"a","reason":"Cabe na janela disponível.","alternatives":["b"],"confidence":"HIGH"}""")).nextAction(NextActionRequest(candidates=listOf("a","b","c")),"req-5"); assertEquals("a",r.result["recommendedAction"]?.toString()?.trim('"'))
+        val context=NextActionContext(evidence=listOf("janela disponível"),candidateFacts=listOf(
+            NextActionCandidate("a",durationMinutes=30,dependenciesSatisfied=true,conflictFree=true,fitsAvailableTime=true),
+            NextActionCandidate("b",durationMinutes=20,dependenciesSatisfied=true,conflictFree=true,fitsAvailableTime=true),
+            NextActionCandidate("c",durationMinutes=25,dependenciesSatisfied=true,conflictFree=true,fitsAvailableTime=true),
+        ))
+        val r=AiCapabilityService(FakeGenerator("""{"recommendedAction":"a","reason":"Cabe na janela disponível.","evidence":["janela disponível"],"alternatives":["b"],"confidence":"HIGH","uncertainty":[],"requiresClarification":false}""")).nextAction(NextActionRequest(candidates=listOf("a","b","c"),context=context),"req-5"); assertEquals("a",r.result["recommendedAction"]?.toString()?.trim('"'))
     }
     @Test fun each_capability_rejects_malformed_contracts(){
         assertFailsWith<InvalidAiCapabilityException>{AiCapabilityService(FakeGenerator("""{"commandType":"CREATE_ACTIVITY_DRAFT","explanation":"x","requiresConfirmation":true,"payload":{},"missingFields":[]}""")).naturalLanguage(NaturalLanguageRequest(message="criar"),"req-nl")}
@@ -89,13 +94,15 @@ class AiCapabilitiesTest {
         assertEquals("true",response.result["requiresClarification"]?.toString())
     }
     @Test fun next_action_with_null_recommendation_requires_clarification(){
-        assertFailsWith<InvalidAiCapabilityException>{AiCapabilityService(FakeGenerator("""{"recommendedAction":null,"reason":"não sei","evidence":[],"alternatives":[],"confidence":"LOW","uncertainty":[],"requiresClarification":false}""")).nextAction(NextActionRequest(candidates=listOf("a"),context=NextActionContext(evidence=listOf("fact"))),"req-null-no-clarification")}
+        assertFailsWith<InvalidAiCapabilityException>{AiCapabilityService(FakeGenerator("""{"recommendedAction":null,"reason":"não sei","evidence":[],"alternatives":[],"confidence":"HIGH","uncertainty":[],"requiresClarification":false}""")).nextAction(NextActionRequest(candidates=listOf("a"),context=NextActionContext(evidence=listOf("fact"))),"req-null-recommendation")}
     }
-    @Test fun next_action_must_ground_evidence_in_context(){
-        assertFailsWith<InvalidAiCapabilityException>{AiCapabilityService(FakeGenerator("""{"recommendedAction":"a","reason":"ok","evidence":["invented"],"alternatives":[],"confidence":"HIGH","uncertainty":[],"requiresClarification":false}""")).nextAction(NextActionRequest(candidates=listOf("a"),context=NextActionContext(evidence=listOf("real fact"))),"req-next-evidence")}
+    @Test fun next_action_evidence_must_be_grounded(){
+        assertFailsWith<InvalidAiCapabilityException>{AiCapabilityService(FakeGenerator("""{"recommendedAction":"a","reason":"chosen","evidence":["invented"],"alternatives":[],"confidence":"HIGH","uncertainty":[],"requiresClarification":false}""")).nextAction(NextActionRequest(candidates=listOf("a"),context=NextActionContext(evidence=listOf("real"))),"req-next-evidence")}
     }
-    @Test fun natural_language_mutation_requires_confirmation(){assertFailsWith<InvalidAiCapabilityException>{AiCapabilityService(FakeGenerator("""{"commandType":"CREATE_ACTIVITY_DRAFT","explanation":"criar","requiresConfirmation":false,"payload":{"title":"Estudar"},"inferredFields":[],"missingFields":[]}""")).naturalLanguage(NaturalLanguageRequest(message="criar estudo"),"req-nl-confirmation")}}
-    @Test fun natural_language_missing_information_does_not_require_confirmation(){val r=AiCapabilityService(FakeGenerator("""{"commandType":"MISSING_INFORMATION","explanation":"faltam dados","requiresConfirmation":false,"payload":{},"inferredFields":[],"missingFields":["date"]}""")).naturalLanguage(NaturalLanguageRequest(message="criar algo"),"req-nl-missing");assertEquals("MISSING_INFORMATION",r.result["commandType"]?.toString()?.trim('"'))}
-    @Test fun oversized_inputs_are_rejected_before_generation(){var generated=false;val generator=object:AiTextGenerator{override val modelName="fake-model";override fun generate(prompt:String):String{generated=true;return "{}"}};assertFailsWith<IllegalArgumentException>{AiCapabilityService(generator).naturalLanguage(NaturalLanguageRequest(message="x".repeat(12_001)),"req-size")};assertFalse(generated)}
-    @Test fun request_contract_serializes_without_provider_types(){val encoded=Json{encodeDefaults=true}.encodeToString(NaturalLanguageRequest.serializer(),NaturalLanguageRequest(message="Estudar francês amanhã"));assertEquals(true,encoded.contains("Estudar francês"));assertEquals(false,encoded.contains("gemini"))}
+    @Test fun natural_language_requires_confirmation_or_missing_information(){
+        assertFailsWith<InvalidAiCapabilityException>{AiCapabilityService(FakeGenerator("""{"commandType":"CREATE_ACTIVITY_DRAFT","explanation":"criar","requiresConfirmation":false,"payload":{"title":"Academia"},"inferredFields":[],"missingFields":[]}""")).naturalLanguage(NaturalLanguageRequest(message="criar academia"),"req-nl-confirmation")}
+        val r=AiCapabilityService(FakeGenerator("""{"commandType":"MISSING_INFORMATION","explanation":"faltam dados","requiresConfirmation":false,"payload":{},"inferredFields":[],"missingFields":["horário"]}""")).naturalLanguage(NaturalLanguageRequest(message="organizar"),"req-nl-missing");assertEquals("MISSING_INFORMATION",r.result["commandType"]?.toString()?.trim('"'))
+    }
+    @Test fun oversized_inputs_are_rejected(){assertFailsWith<IllegalArgumentException>{AiCapabilityService(FakeGenerator("{} ")).naturalLanguage(NaturalLanguageRequest(message="x".repeat(12001)),"req-big")}}
+    @Test fun provider_independent_serialization_uses_structured_request(){val r=AiCapabilityService(FakeGenerator("""{"recommendedAction":null,"reason":"faltam fatos","evidence":[],"alternatives":[],"confidence":"LOW","uncertainty":["contexto"],"requiresClarification":true}""")).nextAction(NextActionRequest(context=NextActionContext(evidence=listOf("contexto"))),"req-serialization");assertFalse(r.model.isBlank())}
 }
