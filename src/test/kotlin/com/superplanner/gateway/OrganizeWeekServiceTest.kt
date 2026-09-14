@@ -53,7 +53,18 @@ class OrganizeWeekServiceTest {
         val result = service.organize(
             OrganizeWeekRequest(
                 weekStart = "2026-09-14",
-                timezone = "America/Sao_Paulo"
+                timezone = "America/Sao_Paulo",
+                fixedCommitments = listOf(
+                    PlanItem("work", "Trabalho", "2026-09-14", "09:00", "18:00", required = true)
+                ),
+                desires = listOf(
+                    PlanItem("gym", "Academia", "2026-09-14", durationMinutes = 60)
+                ),
+                logistics = listOf(
+                    LogisticConstraint(type = "commute", minutes = 45, beforeItemId = "work"),
+                    LogisticConstraint(type = "preparation", minutes = 30, beforeItemId = "work")
+                ),
+                aiTips = listOf("preservar margem de recuperação")
             )
         )
 
