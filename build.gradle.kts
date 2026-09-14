@@ -4,6 +4,7 @@ plugins {
     id("io.ktor.plugin") version "3.2.3"
     id("org.jlleitschuh.gradle.ktlint") version "14.2.0"
     id("io.gitlab.arturbosch.detekt") version "2.0.0-alpha.6"
+    id("org.sonarqube") version "7.4.0.8496"
     jacoco
     application
 }
@@ -43,6 +44,22 @@ detekt {
     buildUponDefaultConfig = true
 }
 
+sonar {
+    properties {
+        property("sonar.projectKey", "marciacrisrs_super-planner-ai-gateway")
+        property("sonar.organization", "marciacrisrs")
+        property("sonar.host.url", "https://sonarcloud.io")
+        property("sonar.sourceEncoding", "UTF-8")
+        property("sonar.sources", "src/main/kotlin")
+        property("sonar.tests", "src/test/kotlin")
+        property("sonar.kotlin.detekt.reportPaths", "$rootDir/build/reports/detekt/detekt.xml")
+        property("sonar.coverage.jacoco.xmlReportPaths", "$rootDir/build/reports/jacoco/test/jacocoTestReport.xml")
+        property("sonar.junit.reportPaths", "$rootDir/build/test-results/test")
+        property("sonar.coverage.exclusions", "**/Application.kt,**/*Config.kt")
+        property("sonar.qualitygate.wait", "true")
+    }
+}
+
 jacoco {
     toolVersion = "0.8.14"
 }
@@ -77,4 +94,8 @@ tasks.jacocoTestCoverageVerification {
 
 tasks.check {
     dependsOn(tasks.jacocoTestCoverageVerification, tasks.ktlintCheck, tasks.detekt)
+}
+
+tasks.named("sonar") {
+    dependsOn(tasks.detekt, tasks.test, tasks.jacocoTestReport)
 }
