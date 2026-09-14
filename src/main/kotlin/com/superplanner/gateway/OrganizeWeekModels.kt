@@ -33,6 +33,7 @@ data class LogisticConstraint(
     val minutes: Int,
     val beforeItemId: String? = null,
     val afterItemId: String? = null,
+    val beforeItemId: String? = null,
     val origin: String? = null,
     val destination: String? = null,
     val required: Boolean = true
@@ -51,7 +52,7 @@ data class OrganizeWeekResponse(
     val conflicts: List<PlanningConflict>,
     val opportunities: List<PlanningOpportunity>,
     val explanations: List<PlanningExplanation>,
-    val model: String
+    val model: String = ""
 )
 
 @Serializable
