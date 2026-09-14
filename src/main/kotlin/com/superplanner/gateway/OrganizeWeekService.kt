@@ -5,6 +5,8 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
 
+class InvalidOrganizeWeekException(message: String, cause: Throwable? = null) : IllegalStateException(message, cause)
+
 class OrganizeWeekService(
     private val aiTextGenerator: AiTextGenerator,
     private val json: Json = Json { ignoreUnknownKeys = true }
@@ -21,10 +23,12 @@ class OrganizeWeekService(
             val response = json.decodeFromJsonElement(OrganizeWeekResponse.serializer(), jsonObject)
             validateResponse(request, response)
             response.copy(model = aiTextGenerator.modelName)
+        } catch (exception: InvalidOrganizeWeekException) {
+            throw exception
         } catch (exception: IllegalArgumentException) {
-            throw IllegalStateException("AI returned an invalid organize-week proposal", exception)
+            throw InvalidOrganizeWeekException("AI returned an invalid organize-week proposal", exception)
         } catch (exception: Exception) {
-            throw IllegalStateException("AI returned an invalid organize-week proposal", exception)
+            throw InvalidOrganizeWeekException("AI returned an invalid organize-week proposal", exception)
         }
     }
 
@@ -212,7 +216,7 @@ class OrganizeWeekService(
         return try {
             json.parseToJsonElement(cleaned).jsonObject
         } catch (exception: Exception) {
-            throw IllegalStateException("AI returned non-JSON organize-week output", exception)
+            throw InvalidOrganizeWeekException("AI returned non-JSON organize-week output", exception)
         }
     }
 
