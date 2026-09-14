@@ -60,14 +60,7 @@ class OrganizeWeekSemanticValidationTest {
         val result = OrganizeWeekService(
             FakeAi(responseWith(ProposedPlanItem("gym", "Academia", "2026-09-14", "07:00", "08:00", "desire")))
         ).organize(
-            OrganizeWeekRequest(
-                "2026-09-14",
-                "America/Sao_Paulo",
-                fixedCommitments = listOf(
-                    fixed,
-                    PlanItem("prep", "Preparação", "2026-09-14", "07:00", "08:00")
-                )
-            )
+            OrganizeWeekRequest("2026-09-14", "America/Sao_Paulo", fixedCommitments = listOf(fixed))
         )
         assertEquals("gym", result.proposedItems.single().id)
     }
