@@ -14,7 +14,7 @@ class AiCapabilitiesTest {
 
     @Test
     fun capability_response_is_provider_independent() {
-        val service = AiCapabilityService(FakeGenerator("{\"explanation\":\"ok\",\"evidenceUsed\":[\"fact\"],\"confidence\":\"HIGH\"}"))
+        val service = AiCapabilityService(FakeGenerator("{\"explanation\":\"ok\",\"evidenceUsed\":[\"janela de 30 minutos\"],\"confidence\":\"HIGH\"}"))
         val response = service.explanation(
             ExplanationRequest(question = "Por quê?", evidence = listOf("janela de 30 minutos")),
             "req-1",
@@ -23,6 +23,29 @@ class AiCapabilitiesTest {
         assertEquals("req-1", response.requestId)
         assertEquals("fake-model", response.model)
         assertEquals("ok", response.result["explanation"]?.toString()?.trim('"'))
+    }
+
+    @Test
+    fun contextual_explanation_cannot_cite_unsupplied_evidence() {
+        val service = AiCapabilityService(FakeGenerator("""{"explanation":"x","evidenceUsed":["fact-invented"],"confidence":"HIGH"}"""))
+        assertFailsWith<Exception> {
+            service.explanation(ExplanationRequest(question = "por quê?", evidence = listOf("fact-real")), "req-evidence")
+        }
+    }
+
+    @Test
+    fun contextual_explanation_with_no_evidence_is_low_confidence() {
+        val service = AiCapabilityService(FakeGenerator("""{"explanation":"Não há informação suficiente.","evidenceUsed":[],"confidence":"LOW"}"""))
+        val response = service.explanation(ExplanationRequest(question = "por quê?"), "req-insufficient")
+        assertEquals("LOW", response.result["confidence"]?.toString()?.trim('"'))
+    }
+
+    @Test
+    fun contextual_explanation_with_no_evidence_cannot_claim_high_confidence() {
+        val service = AiCapabilityService(FakeGenerator("""{"explanation":"x","evidenceUsed":[],"confidence":"HIGH"}"""))
+        assertFailsWith<Exception> {
+            service.explanation(ExplanationRequest(question = "por quê?"), "req-insufficient-high")
+        }
     }
 
     @Test
