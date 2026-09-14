@@ -58,6 +58,7 @@ class OrganizeWeekSemanticValidationTest {
     @Test
     fun `proposal outside fixed commitment window is accepted`() {
         val fixed = PlanItem("work", "Trabalho", "2026-09-14", "09:00", "18:00", required = true)
+        val desire = PlanItem("gym", "Academia", "2026-09-14", durationMinutes = 60)
         val result = OrganizeWeekService(
             FakeAi(
                 responseWith(
@@ -66,7 +67,12 @@ class OrganizeWeekSemanticValidationTest {
                 )
             )
         ).organize(
-            OrganizeWeekRequest("2026-09-14", "America/Sao_Paulo", fixedCommitments = listOf(fixed))
+            OrganizeWeekRequest(
+                "2026-09-14",
+                "America/Sao_Paulo",
+                fixedCommitments = listOf(fixed),
+                desires = listOf(desire),
+            )
         )
         assertEquals(listOf("work", "gym"), result.proposedItems.map { it.id })
     }
