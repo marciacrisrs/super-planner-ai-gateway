@@ -13,7 +13,7 @@ class AiCapabilitiesTest {
 
     @Test
     fun capability_response_is_provider_independent() {
-        val service = AiCapabilityService(FakeGenerator("{\"explanation\":\"ok\",\"confidence\":\"HIGH\"}"))
+        val service = AiCapabilityService(FakeGenerator("{\"explanation\":\"ok\",\"evidenceUsed\":[\"fact\"],\"confidence\":\"HIGH\"}"))
         val response = service.explanation(
             ExplanationRequest(question = "Por quê?", evidence = listOf("janela de 30 minutos")),
             "req-1",
@@ -43,12 +43,62 @@ class AiCapabilitiesTest {
             service.nextAction(NextActionRequest(candidates = listOf("a", "b")), "req-3")
         }
 
+        assertFailsWith<IllegalArgumentException> {
+            AiCapabilityService(FakeGenerator("""{"recommendedAction":"a","reason":"reason","alternatives":["b","c","a"],"confidence":"HIGH"}""")).nextAction(
+                NextActionRequest(candidates = listOf("a", "b", "c")), "req-4",
+            )
+        }
+
         val valid = AiCapabilityService(
             FakeGenerator(
                 """{"recommendedAction":"a","reason":"Cabe na janela disponível.","alternatives":["b"],"confidence":"HIGH"}""",
             ),
-        ).nextAction(NextActionRequest(candidates = listOf("a", "b", "c")), "req-4")
+        ).nextAction(NextActionRequest(candidates = listOf("a", "b", "c")), "req-5")
         assertEquals("a", valid.result["recommendedAction"]?.toString()?.trim('"'))
+    }
+
+    @Test
+    fun each_capability_rejects_malformed_contracts() {
+        assertFailsWith<IllegalArgumentException> {
+            AiCapabilityService(FakeGenerator("""{"commandType":"CREATE_ACTIVITY_DRAFT","explanation":"x","requiresConfirmation":true,"payload":{},"inferredFields":[],"missingFields":[]}""")).naturalLanguage(
+                NaturalLanguageRequest(message = "criar"), "req-nl",
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            AiCapabilityService(FakeGenerator("""{"explanation":"x","evidenceUsed":[],"confidence":"UNKNOWN"}""")).explanation(
+                ExplanationRequest(question = "por quê?"), "req-exp",
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            AiCapabilityService(FakeGenerator("""{"commandType":"UNKNOWN","requiresConfirmation":true,"payload":{},"explanation":"x"}""")).command(
+                CommandRequest(message = "fazer algo"), "req-cmd",
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            AiCapabilityService(FakeGenerator("""{"insights":[{"title":"x","description":"y","evidence":[],"confidence":"HIGH"}],"recommendations":[1]}""")).insight(
+                InsightRequest(), "req-ins",
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            AiCapabilityService(FakeGenerator("""{"preferences":[{"preference":"x","evidence":[],"confidence":"HIGH"}]}""")).preference(
+                PreferenceRequest(schemaVersion = "2"), "req-pref",
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            AiCapabilityService(FakeGenerator("""{"scenario":"x","changes":[],"assumptions":[],"requiresClarification":"false"}""")).scenario(
+                ScenarioRequest(question = "e se?"), "req-scenario",
+            )
+        }
+    }
+
+    @Test
+    fun command_requires_confirmation_for_mutations() {
+        val service = AiCapabilityService(
+            FakeGenerator("""{"commandType":"CHANGE_ACTIVITY","requiresConfirmation":false,"payload":{},"explanation":"x"}"""),
+        )
+        assertFailsWith<IllegalArgumentException> {
+            service.command(CommandRequest(message = "mude"), "req-command")
+        }
     }
 
     @Test
