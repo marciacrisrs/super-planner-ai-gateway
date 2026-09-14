@@ -16,14 +16,23 @@ object GatewayObservability {
         )
     }
 
-    fun failure(requestId: String, capability: String, error: String, startedNanos: Long) {
-        logger.warn(
-            "event=ai_request status=failure requestId={} capability={} error={} latencyMs={}",
-            requestId,
-            capability,
-            error,
-            elapsedMs(startedNanos),
-        )
+    fun failure(requestId: String, capability: String, error: String, startedNanos: Long? = null) {
+        if (startedNanos == null) {
+            logger.warn(
+                "event=ai_request status=failure requestId={} capability={} error={}",
+                requestId,
+                capability,
+                error,
+            )
+        } else {
+            logger.warn(
+                "event=ai_request status=failure requestId={} capability={} error={} latencyMs={}",
+                requestId,
+                capability,
+                error,
+                elapsedMs(startedNanos),
+            )
+        }
     }
 
     private fun elapsedMs(startedNanos: Long): Long =
