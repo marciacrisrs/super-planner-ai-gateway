@@ -18,8 +18,33 @@ data class InsightRequest(val schemaVersion: String = "1", val evidence: List<St
 data class PreferenceRequest(val schemaVersion: String = "1", val observations: List<String> = emptyList())
 @Serializable
 data class ScenarioRequest(val schemaVersion: String = "1", val question: String, val context: AiProposalContext = AiProposalContext())
+
 @Serializable
-data class NextActionRequest(val schemaVersion: String = "1", val context: AiProposalContext = AiProposalContext(), val candidates: List<String> = emptyList())
+data class NextActionCandidate(
+    val id: String,
+    val durationMinutes: Int? = null,
+    val preparationMinutes: Int? = null,
+    val travelMinutes: Int? = null,
+    val priority: Int? = null,
+    val dependenciesSatisfied: Boolean? = null,
+    val conflictFree: Boolean? = null,
+    val fitsAvailableTime: Boolean? = null,
+)
+
+@Serializable
+data class NextActionContext(
+    val nowIso: String? = null,
+    val availableMinutes: Int? = null,
+    val evidence: List<String> = emptyList(),
+    val candidateFacts: List<NextActionCandidate> = emptyList(),
+)
+
+@Serializable
+data class NextActionRequest(
+    val schemaVersion: String = "1",
+    val context: NextActionContext = NextActionContext(),
+    val candidates: List<String> = emptyList(),
+)
 
 @Serializable
 data class AiCapabilityResponse(val schemaVersion: String = "1", val requestId: String, val result: JsonObject, val model: String)
@@ -87,14 +112,18 @@ class AiCapabilityService(
     }
 
     fun nextAction(request: NextActionRequest, requestId: String): AiCapabilityResponse {
-        require(request.schemaVersion == "1") { "unsupported schemaVersion" }; validateContext(request.context)
-        require(request.candidates.distinct().size == request.candidates.size) { "candidates must be unique" }; validateStringList(request.candidates, "candidates")
+        require(request.schemaVersion == "1") { "unsupported schemaVersion" }
+        validateNextActionRequest(request)
         return generate(requestId, """
-            Recommend a next action only from the supplied candidate list. Never invent time, capacity, priorities, dependencies, preparation or travel facts.
-            Return ONLY JSON: {"recommendedAction":"candidate id or null","reason":string,"alternatives":["candidate ids"],"confidence":"HIGH|MEDIUM|LOW"}
+            Recommend a next action only from the supplied candidate list. Never invent or calculate planning facts.
+            Use supplied temporal/planning facts exactly as provided. Respect duration, preparation, travel, priority, dependencies and conflict status when those facts exist.
+            fitsAvailableTime is a domain-supplied feasibility fact; do not recompute it. dependenciesSatisfied=false or conflictFree=false means the candidate is not eligible for recommendation.
+            If context is insufficient, return recommendedAction=null, confidence=LOW, requiresClarification=true and explain the missing context in uncertainty.
+            Evidence must contain only exact supplied context evidence. Suggestions are not execution.
+            Return ONLY JSON: {"recommendedAction":"candidate id or null","reason":string,"evidence":[string],"alternatives":["candidate ids"],"confidence":"HIGH|MEDIUM|LOW","uncertainty":[string],"requiresClarification":boolean}
             Alternatives must be supplied candidates and at most two.
             Request: ${json.encodeToString(NextActionRequest.serializer(), request)}
-        """.trimIndent(), { result -> validateNextAction(result, request.candidates) })
+        """.trimIndent(), { result -> validateNextAction(result, request) })
     }
 
     private fun validate(schemaVersion: String, message: String) {
@@ -124,7 +153,64 @@ class AiCapabilityService(
     private fun validateInsights(result: JsonObject, supplied: List<String>, sampleSize: Int) { val insights = result["insights"] as? JsonArray ?: throw IllegalArgumentException(); insights.forEach { item -> val obj = item as? JsonObject ?: throw IllegalArgumentException(); requireString(obj,"title"); requireString(obj,"description"); requireStringArray(obj,"evidence"); requireEnum(obj,"confidence",CONFIDENCE); val evidence=(obj["evidence"] as JsonArray).map{(it as JsonPrimitive).content}; require(evidence.all{it in supplied}); if(sampleSize < MIN_INSIGHT_SAMPLE_SIZE) require((obj["confidence"] as JsonPrimitive).content=="LOW") }; requireStringArray(result,"recommendations") }
     private fun validatePreferences(result: JsonObject, observations: List<String>) { val preferences=result["preferences"] as? JsonArray ?: throw IllegalArgumentException(); preferences.forEach { item -> val obj=item as? JsonObject ?: throw IllegalArgumentException(); requireString(obj,"preference"); requireStringArray(obj,"evidence"); requireEnum(obj,"confidence",CONFIDENCE); val evidence=(obj["evidence"] as JsonArray).map{(it as JsonPrimitive).content}; require(evidence.isNotEmpty()); require(evidence.all{it in observations}); if(observations.size < MIN_PREFERENCE_SAMPLE_SIZE) require((obj["confidence"] as JsonPrimitive).content=="LOW") } }
     private fun validateScenario(result: JsonObject) { requireString(result,"scenario"); requireStringArray(result,"assumptions"); requireStringArray(result,"inferredFields"); requireBoolean(result,"requiresClarification"); val changes=result["changes"] as? JsonArray ?: throw IllegalArgumentException(); changes.forEach { item -> val c=item as? JsonObject ?: throw IllegalArgumentException(); requireString(c,"field"); requireString(c,"to"); requireBoolean(c,"hypothetical"); require(c["hypothetical"]?.toString()=="true"); c["from"]?.let{ require(it is JsonPrimitive && it.isString) } } }
-    private fun validateNextAction(result: JsonObject, candidates: List<String>) { val recommended=result["recommendedAction"]?.let{v-> when(v){is JsonPrimitive->if(v.content=="null"&&!v.isString)null else v.content; else->throw IllegalArgumentException()} }; require(recommended==null||recommended in candidates); requireString(result,"reason"); requireEnum(result,"confidence",CONFIDENCE); val alternatives=result["alternatives"] as? JsonArray ?: throw IllegalArgumentException(); require(alternatives.size<=2); require(alternatives.all{it is JsonPrimitive&&it.isString&&it.content in candidates}); require(alternatives.distinct().size==alternatives.size) }
+
+    private fun validateNextActionRequest(request: NextActionRequest) {
+        require(request.candidates.size <= MAX_LIST_ITEMS) { "candidates has too many items" }
+        require(request.candidates.distinct().size == request.candidates.size) { "candidates must be unique" }
+        validateStringList(request.candidates, "candidates")
+        request.context.nowIso?.let { require(it.length <= MAX_INPUT_LENGTH) }
+        request.context.availableMinutes?.let { require(it >= 0) }
+        validateStringList(request.context.evidence, "evidence")
+        require(request.context.candidateFacts.size <= MAX_LIST_ITEMS) { "candidateFacts has too many items" }
+        request.context.candidateFacts.forEach { fact ->
+            require(fact.id.isNotBlank() && fact.id.length <= MAX_INPUT_LENGTH)
+            require(fact.id in request.candidates)
+            fact.durationMinutes?.let { require(it > 0) }
+            fact.preparationMinutes?.let { require(it >= 0) }
+            fact.travelMinutes?.let { require(it >= 0) }
+            fact.priority?.let { require(it >= 0) }
+        }
+        require(request.context.candidateFacts.map { it.id }.distinct().size == request.context.candidateFacts.size) { "candidateFacts ids must be unique" }
+    }
+
+    private fun validateNextAction(result: JsonObject, request: NextActionRequest) {
+        val recommended = result["recommendedAction"]?.let { value ->
+            when (value) {
+                is JsonPrimitive -> if (value.content == "null" && !value.isString) null else value.content
+                else -> throw IllegalArgumentException()
+            }
+        }
+        require(recommended == null || recommended in request.candidates)
+        requireString(result, "reason")
+        requireStringArray(result, "evidence")
+        requireStringArray(result, "uncertainty")
+        requireEnum(result, "confidence", CONFIDENCE)
+        requireBoolean(result, "requiresClarification")
+        val evidence = (result["evidence"] as JsonArray).map { (it as JsonPrimitive).content }
+        require(evidence.all { it in request.context.evidence })
+        val alternatives = result["alternatives"] as? JsonArray ?: throw IllegalArgumentException()
+        require(alternatives.size <= 2)
+        require(alternatives.all { it is JsonPrimitive && it.isString && it.content in request.candidates })
+        require(alternatives.distinct().size == alternatives.size)
+        require(recommended !in alternatives.map { (it as JsonPrimitive).content })
+
+        val factsById = request.context.candidateFacts.associateBy { it.id }
+        fun eligible(id: String): Boolean {
+            val facts = factsById[id] ?: return true
+            return facts.dependenciesSatisfied != false && facts.conflictFree != false && facts.fitsAvailableTime != false
+        }
+        if (recommended != null) require(eligible(recommended))
+        alternatives.forEach { require(eligible((it as JsonPrimitive).content)) }
+
+        val hasPlanningContext = request.context.nowIso != null || request.context.availableMinutes != null || request.context.evidence.isNotEmpty() || request.context.candidateFacts.isNotEmpty()
+        if (request.candidates.isEmpty() || !hasPlanningContext) {
+            require(recommended == null)
+            require((result["confidence"] as JsonPrimitive).content == "LOW")
+            require((result["requiresClarification"] as JsonPrimitive).content == "true")
+        }
+        if (recommended == null) require((result["requiresClarification"] as JsonPrimitive).content == "true")
+    }
+
     private fun requireString(result: JsonObject,key:String){val v=result[key] as? JsonPrimitive; require(v!=null&&v.isString&&v.content.isNotBlank())}
     private fun requireBoolean(result: JsonObject,key:String){val v=result[key] as? JsonPrimitive; require(v!=null&&!v.isString&&v.content in setOf("true","false"))}
     private fun requirePositiveInteger(result: JsonObject,key:String){val v=result[key] as? JsonPrimitive; require(v!=null&&!v.isString&&v.content.toIntOrNull()?.let{it>0}==true)}
