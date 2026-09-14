@@ -61,7 +61,7 @@ class AiCapabilitiesTest {
     @Test
     fun each_capability_rejects_malformed_contracts() {
         assertFailsWith<IllegalArgumentException> {
-            AiCapabilityService(FakeGenerator("""{"commandType":"CREATE_ACTIVITY_DRAFT","explanation":"x","requiresConfirmation":true,"payload":{},"inferredFields":[],"missingFields":[]}""")).naturalLanguage(
+            AiCapabilityService(FakeGenerator("""{"commandType":"CREATE_ACTIVITY_DRAFT","explanation":"x","requiresConfirmation":true,"payload":{},"missingFields":[]}""")).naturalLanguage(
                 NaturalLanguageRequest(message = "criar"), "req-nl",
             )
         }
