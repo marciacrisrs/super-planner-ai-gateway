@@ -1,5 +1,6 @@
 package com.superplanner.gateway
 
+import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.*
 import io.ktor.server.plugins.calllogging.CallLogging
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
@@ -18,12 +19,13 @@ fun Application.module() {
     val aiProposalService = AiProposalService(geminiService)
     val capabilityService = AiCapabilityService(geminiService)
     val security = GatewaySecurity()
+    val configurationReady = gatewayConfigurationReady()
 
     install(CallLogging)
     install(StatusPages) {
         exception<Throwable> { call, cause ->
             val requestId = GatewaySecurity.requestId(call)
-            GatewayObservability.failure(requestId, "unhandled", cause::class.simpleName ?: "error", System.nanoTime())
+            GatewayObservability.failure(requestId, "unhandled", cause::class.simpleName ?: "error")
             call.respond(HttpStatusCode.InternalServerError, GatewayError("internal_error", "Internal server error", requestId))
         }
     }
@@ -37,9 +39,25 @@ fun Application.module() {
 
     routing {
         get("/health") { call.respond(HealthResponse(status = "ok")) }
-        get("/ready") { call.respond(HealthResponse(status = "ready")) }
+        get("/ready") {
+            if (configurationReady) {
+                call.respond(HealthResponse(status = "ready"))
+            } else {
+                call.respond(HttpStatusCode.ServiceUnavailable, HealthResponse(status = "not_ready"))
+            }
+        }
         aiRoutes(geminiService, organizeWeekService, aiProposalService, capabilityService, security)
     }
+}
+
+private fun gatewayConfigurationReady(): Boolean {
+    val environment = System.getenv("ENVIRONMENT")?.trim()?.lowercase() ?: "production"
+    val project = System.getenv("GOOGLE_CLOUD_PROJECT")?.trim().orEmpty()
+    val location = System.getenv("GOOGLE_CLOUD_LOCATION")?.trim().orEmpty()
+    val model = System.getenv("GEMINI_MODEL")?.trim().orEmpty()
+    val apiKey = System.getenv("GATEWAY_API_KEY")?.trim().orEmpty()
+    return project.isNotBlank() && location.isNotBlank() && model.isNotBlank() &&
+        (environment == "test" || apiKey.isNotBlank())
 }
 
 @Serializable
