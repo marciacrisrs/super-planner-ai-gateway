@@ -23,7 +23,7 @@ class OrganizeWeekSemanticValidationTest {
     fun `fixed commitment must not be omitted`() {
         val fixed = PlanItem("work", "Trabalho", "2026-09-14", "09:00", "18:00", required = true)
         assertFailsWith<IllegalStateException> {
-            OrganizeWeekService(FakeAi(responseWith()).organize(
+            OrganizeWeekService(FakeAi(responseWith())).organize(
                 OrganizeWeekRequest("2026-09-14", "America/Sao_Paulo", fixedCommitments = listOf(fixed))
             )
         }
