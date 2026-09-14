@@ -1,0 +1,103 @@
+config:
+  validation: true
+  warningsAsErrors: false
+
+console-reports:
+  active: true
+
+complexity:
+  severity: warning
+  LongMethod:
+    active: true
+    allowedLines: 120
+  LongParameterList:
+    active: true
+    allowedFunctionParameters: 8
+    allowedConstructorParameters: 9
+    ignoreDefaultParameters: true
+  TooManyFunctions:
+    active: true
+    allowedFunctionsPerFile: 20
+    allowedFunctionsPerClass: 20
+    allowedFunctionsPerInterface: 12
+    allowedFunctionsPerObject: 20
+    allowedFunctionsPerEnum: 12
+    ignoreDeprecated: true
+    ignorePrivate: true
+    ignoreOverridden: true
+  CyclomaticComplexMethod:
+    active: true
+    allowedComplexity: 18
+  CognitiveComplexMethod:
+    active: true
+    allowedComplexity: 25
+
+coroutines:
+  severity: warning
+  active: true
+
+naming:
+  severity: warning
+  FunctionNaming:
+    active: true
+  TopLevelPropertyNaming:
+    active: true
+  VariableNaming:
+    active: true
+
+style:
+  severity: warning
+  MagicNumber:
+    active: true
+    ignoreNumbers: ['-1', '0', '1', '2', '3', '4', '5', '6', '8', '10', '12']
+    ignoreHashCodeFunction: true
+    ignorePropertyDeclaration: true
+    ignoreLocalVariableDeclaration: true
+    ignoreConstantDeclaration: true
+    ignoreCompanionObjectPropertyDeclaration: true
+    ignoreAnnotation: true
+    ignoreNamedArgument: true
+    ignoreEnums: true
+    ignoreRanges: true
+  UnusedPrivateFunction:
+    active: true
+  UnusedPrivateProperty:
+    active: true
+  MaxLineLength:
+    active: true
+    maxLineLength: 140
+    excludeCommentStatements: true
+  ReturnCount:
+    active: true
+    max: 3
+    excludeGuardClauses: true
+  ThrowsCount:
+    active: true
+    max: 3
+  WildcardImport:
+    active: true
+
+comments:
+  severity: warning
+  UndocumentedPublicClass:
+    active: false
+  UndocumentedPublicFunction:
+    active: false
+  UndocumentedPublicProperty:
+    active: false
+
+potential-bugs:
+  severity: error
+  active: true
+
+performance:
+  severity: warning
+  active: true
+
+exceptions:
+  severity: error
+  active: true
+
+empty-blocks:
+  severity: warning
+  active: true
