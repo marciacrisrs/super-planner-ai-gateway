@@ -102,6 +102,23 @@ class AiCapabilitiesTest {
     }
 
     @Test
+    fun oversized_inputs_are_rejected_before_generation() {
+        var generated = false
+        val generator = object : AiTextGenerator {
+            override val modelName = "fake-model"
+            override fun generate(prompt: String): String {
+                generated = true
+                return "{}"
+            }
+        }
+        val service = AiCapabilityService(generator)
+        assertFailsWith<IllegalArgumentException> {
+            service.naturalLanguage(NaturalLanguageRequest(message = "x".repeat(12_001)), "req-size")
+        }
+        assertFalse(generated)
+    }
+
+    @Test
     fun request_contract_serializes_without_provider_types() {
         val json = Json { encodeDefaults = true }
         val encoded = json.encodeToString(
