@@ -1,0 +1,1 @@
+Gateway backlog to create and implement: #2 provider-independent AI Proposal; #3 security/auth/limits; #4 observability/error handling; #5 NL to AiProposal; #6 contextual explanation; #7 NL to PlanningCommand; #8 planning insights; #9 preference inference; #10 scenario interpretation; #11 next action recommendation. GW #1 already exists.
