@@ -11,7 +11,27 @@ data class OrganizeWeekRequest(
     val desires: List<PlanItem> = emptyList(),
     val logistics: List<LogisticConstraint> = emptyList(),
     val preferences: List<PlanningPreference> = emptyList(),
-    val aiTips: List<String> = emptyList()
+    val aiTips: List<String> = emptyList(),
+    val capacity: WeeklyCapacityFacts? = null,
+)
+
+@Serializable
+data class WeeklyCapacityFacts(
+    val load: String,
+    val totalCapacityMinutes: Int,
+    val totalDesiredMinutes: Int,
+    val totalRemainingMinutes: Int,
+    val days: List<DailyCapacityFacts> = emptyList(),
+    val reasons: List<String> = emptyList(),
+)
+
+@Serializable
+data class DailyCapacityFacts(
+    val date: String,
+    val load: String,
+    val schedulableMinutes: Int,
+    val desiredMinutes: Int,
+    val remainingMinutes: Int,
 )
 
 @Serializable
