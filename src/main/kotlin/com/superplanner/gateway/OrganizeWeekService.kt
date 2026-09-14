@@ -64,11 +64,20 @@ class OrganizeWeekService(
 
         val fixedProposals = request.fixedCommitments.associateBy { it.id }
         response.proposedItems.forEach { proposed ->
-            fixedProposals[proposed.id]?.let { fixed ->
-                return@forEach
-            }
+            if (fixedProposals.containsKey(proposed.id)) return@forEach
+
             val proposedStart = parseTime(proposed.startTime, "startTime")
             val proposedEnd = parseTime(proposed.endTime, "endTime")
+
+            request.existingPlan
+                .filter { it.id == proposed.id && it.date == proposed.date && it.startTime != null }
+                .forEach { existing ->
+                    val minimumStart = parseTime(existing.startTime!!, "existing startTime")
+                    require(!proposedStart.isBefore(minimumStart)) {
+                        "proposal ${proposed.id} starts before its domain minimum startTime"
+                    }
+                }
+
             request.fixedCommitments
                 .filter { it.date == proposed.date && it.startTime != null && it.endTime != null }
                 .forEach { fixed ->
