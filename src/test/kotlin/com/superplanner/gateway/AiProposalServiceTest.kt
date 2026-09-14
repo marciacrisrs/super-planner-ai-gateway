@@ -12,7 +12,7 @@ class AiProposalServiceTest {
     }
 
     @Test
-    fun valid_proposal_is_provider_independent_and_correlated() {
+    fun valid_create_command_is_provider_independent_and_correlated() {
         val service = AiProposalService(
             FakeGenerator(
                 """
@@ -36,6 +36,50 @@ class AiProposalServiceTest {
         assertEquals("CREATE_ACTIVITY_DRAFT", response.proposal.commandType)
         assertEquals("fake-provider-model", response.model)
         assertEquals("Estudar francês", response.proposal.payload["title"]?.toString()?.trim('"'))
+    }
+
+    @Test
+    fun delay_request_maps_to_reorganize_day() {
+        val service = AiProposalService(
+            FakeGenerator("""{"commandType":"REORGANIZE_DAY","explanation":"Aplicar o atraso informado.","requiresConfirmation":true,"payload":{"delayMinutes":40}}"""),
+        )
+        val response = service.propose(AiProposalRequest("1", "Estou 40 minutos atrasada."))
+        assertEquals("REORGANIZE_DAY", response.proposal.commandType)
+        assertEquals("40", response.proposal.payload["delayMinutes"]?.toString())
+    }
+
+    @Test
+    fun cancellation_requires_existing_activity_id_and_confirmation() {
+        val service = AiProposalService(
+            FakeGenerator("""{"commandType":"CANCEL_ACTIVITY","explanation":"Cancelar a atividade identificada.","requiresConfirmation":true,"payload":{"activityId":"activity-42"}}"""),
+        )
+        val response = service.propose(
+            AiProposalRequest("1", "Não vou conseguir fazer academia hoje.", AiProposalContext(activeActivityId = "activity-42")),
+        )
+        assertEquals("CANCEL_ACTIVITY", response.proposal.commandType)
+        assertEquals("activity-42", response.proposal.payload["activityId"]?.toString()?.trim('"'))
+    }
+
+    @Test
+    fun change_request_requires_explicit_existing_activity_id() {
+        val service = AiProposalService(
+            FakeGenerator("""{"commandType":"CHANGE_ACTIVITY","explanation":"Alterar o horário da atividade identificada.","requiresConfirmation":true,"payload":{"activityId":"activity-42","changes":{"startTime":"16:00"}}}"""),
+        )
+        val response = service.propose(
+            AiProposalRequest("1", "Mude esta atividade para 16h.", AiProposalContext(activeActivityId = "activity-42")),
+        )
+        assertEquals("CHANGE_ACTIVITY", response.proposal.commandType)
+        assertEquals("activity-42", response.proposal.payload["activityId"]?.toString()?.trim('"'))
+    }
+
+    @Test
+    fun ambiguous_cancellation_without_activity_id_is_rejected() {
+        val service = AiProposalService(
+            FakeGenerator("""{"commandType":"CANCEL_ACTIVITY","explanation":"x","requiresConfirmation":true,"payload":{"activityId":"invented-id"}}"""),
+        )
+        assertFailsWith<InvalidAiProposalException> {
+            service.propose(AiProposalRequest("1", "Não vou conseguir fazer isso hoje."))
+        }
     }
 
     @Test
@@ -71,6 +115,16 @@ class AiProposalServiceTest {
         )
         assertFailsWith<InvalidAiProposalException> {
             service.propose(AiProposalRequest("1", "criar"))
+        }
+    }
+
+    @Test
+    fun change_command_with_unknown_field_is_rejected() {
+        val service = AiProposalService(
+            FakeGenerator("""{"commandType":"CHANGE_ACTIVITY","explanation":"x","requiresConfirmation":true,"payload":{"activityId":"a1","changes":{"location":"unknown"}}}"""),
+        )
+        assertFailsWith<InvalidAiProposalException> {
+            service.propose(AiProposalRequest("1", "mude local"))
         }
     }
 
