@@ -5,6 +5,7 @@ plugins {
     id("org.jlleitschuh.gradle.ktlint") version "14.2.0"
     id("io.gitlab.arturbosch.detekt") version "2.0.0-alpha.6"
     id("org.sonarqube") version "7.4.0.8496"
+    id("org.cyclonedx.bom") version "3.3.0"
     jacoco
     application
 }
