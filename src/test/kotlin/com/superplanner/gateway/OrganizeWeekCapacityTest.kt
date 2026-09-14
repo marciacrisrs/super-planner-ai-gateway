@@ -1,6 +1,7 @@
 package com.superplanner.gateway
 
 import kotlin.test.Test
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 class OrganizeWeekCapacityTest {
@@ -39,5 +40,44 @@ class OrganizeWeekCapacityTest {
         assertTrue(generator.prompt.contains("OVER_CAPACITY"))
         assertTrue(generator.prompt.contains("600"))
         assertTrue(generator.prompt.contains("sono e recuperação"))
+    }
+
+    @Test
+    fun capacity_rejects_negative_daily_values() {
+        val generator = FakeGenerator()
+        assertFailsWith<IllegalArgumentException> {
+            OrganizeWeekService(generator).organize(
+                OrganizeWeekRequest(
+                    weekStart = "2026-09-14",
+                    timezone = "America/Sao_Paulo",
+                    capacity = WeeklyCapacityFacts(
+                        load = "TIGHT",
+                        totalCapacityMinutes = 600,
+                        totalDesiredMinutes = 300,
+                        totalRemainingMinutes = 300,
+                        days = listOf(DailyCapacityFacts("2026-09-14", "TIGHT", -1, 100, 0)),
+                    ),
+                )
+            )
+        }
+    }
+
+    @Test
+    fun capacity_rejects_blank_load() {
+        val generator = FakeGenerator()
+        assertFailsWith<IllegalArgumentException> {
+            OrganizeWeekService(generator).organize(
+                OrganizeWeekRequest(
+                    weekStart = "2026-09-14",
+                    timezone = "America/Sao_Paulo",
+                    capacity = WeeklyCapacityFacts(
+                        load = "",
+                        totalCapacityMinutes = 600,
+                        totalDesiredMinutes = 300,
+                        totalRemainingMinutes = 300,
+                    ),
+                )
+            )
+        }
     }
 }
