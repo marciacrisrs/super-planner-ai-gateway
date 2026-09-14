@@ -3,6 +3,7 @@ package com.superplanner.gateway
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 
 class AiProposalServiceTest {
     private class FakeGenerator(private val response: String) : AiTextGenerator {
@@ -71,5 +72,45 @@ class AiProposalServiceTest {
         assertFailsWith<InvalidAiProposalException> {
             service.propose(AiProposalRequest("1", "criar"))
         }
+    }
+
+    @Test
+    fun oversized_message_is_rejected_before_provider_call() {
+        var generated = false
+        val generator = object : AiTextGenerator {
+            override val modelName: String = "fake-provider-model"
+            override fun generate(prompt: String): String {
+                generated = true
+                return "{}"
+            }
+        }
+        val service = AiProposalService(generator)
+        assertFailsWith<IllegalArgumentException> {
+            service.propose(AiProposalRequest("1", "x".repeat(12_001)))
+        }
+        assertFalse(generated)
+    }
+
+    @Test
+    fun oversized_context_is_rejected_before_provider_call() {
+        var generated = false
+        val generator = object : AiTextGenerator {
+            override val modelName: String = "fake-provider-model"
+            override fun generate(prompt: String): String {
+                generated = true
+                return "{}"
+            }
+        }
+        val service = AiProposalService(generator)
+        assertFailsWith<IllegalArgumentException> {
+            service.propose(
+                AiProposalRequest(
+                    "1",
+                    "teste",
+                    AiProposalContext(minimalRouteFacts = listOf("x".repeat(4_001))),
+                ),
+            )
+        }
+        assertFalse(generated)
     }
 }
