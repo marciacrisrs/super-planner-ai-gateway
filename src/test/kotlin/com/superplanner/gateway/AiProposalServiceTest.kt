@@ -26,10 +26,7 @@ class AiProposalServiceTest {
         )
 
         val response = service.propose(
-            AiProposalRequest(
-                schemaVersion = "1",
-                message = "Quero estudar francês na quarta por uma hora.",
-            ),
+            AiProposalRequest(schemaVersion = "1", message = "Quero estudar francês na quarta por uma hora."),
             requestId = "request-123",
         )
 
@@ -42,15 +39,8 @@ class AiProposalServiceTest {
 
     @Test
     fun invalid_model_output_is_rejected() {
-        val service = AiProposalService(
-            FakeGenerator(
-                """
-                {"commandType":"NOT_A_COMMAND","explanation":"x","requiresConfirmation":true,"payload":{}}
-                """.trimIndent(),
-            ),
-        )
-
-        assertFailsWith<IllegalArgumentException> {
+        val service = AiProposalService(FakeGenerator("""{"commandType":"NOT_A_COMMAND","explanation":"x","requiresConfirmation":true,"payload":{}}"""))
+        assertFailsWith<InvalidAiProposalException> {
             service.propose(AiProposalRequest("1", "teste"))
         }
     }
@@ -58,9 +48,28 @@ class AiProposalServiceTest {
     @Test
     fun unsupported_schema_version_is_rejected_before_provider_call() {
         val service = AiProposalService(FakeGenerator("{}"))
-
         assertFailsWith<IllegalArgumentException> {
             service.propose(AiProposalRequest("2", "teste"))
+        }
+    }
+
+    @Test
+    fun mutating_proposal_must_require_confirmation() {
+        val service = AiProposalService(
+            FakeGenerator("""{"commandType":"REORGANIZE_DAY","explanation":"x","requiresConfirmation":false,"payload":{"delayMinutes":30}}"""),
+        )
+        assertFailsWith<InvalidAiProposalException> {
+            service.propose(AiProposalRequest("1", "reorganize"))
+        }
+    }
+
+    @Test
+    fun malformed_payload_types_are_rejected() {
+        val service = AiProposalService(
+            FakeGenerator("""{"commandType":"CREATE_ACTIVITY_DRAFT","explanation":"x","requiresConfirmation":true,"payload":{"title":123}}"""),
+        )
+        assertFailsWith<InvalidAiProposalException> {
+            service.propose(AiProposalRequest("1", "criar"))
         }
     }
 }
