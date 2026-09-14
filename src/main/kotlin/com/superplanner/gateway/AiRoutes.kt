@@ -17,7 +17,7 @@ data class GenerateAiRequest(val prompt: String)
 data class GenerateAiResponse(val text: String, val model: String)
 
 fun Route.aiRoutes(
-    geminiService: GeminiService,
+    aiTextGenerator: AiTextGenerator,
     organizeWeekService: OrganizeWeekService,
     aiProposalService: AiProposalService,
     capabilityService: AiCapabilityService,
@@ -31,10 +31,10 @@ fun Route.aiRoutes(
             val request = call.receive<GenerateAiRequest>()
             require(request.prompt.isNotBlank()) { "prompt must not be blank" }
             require(request.prompt.length <= MAX_PROMPT_LENGTH) { "prompt exceeds maximum length" }
-            val text = withAiTimeout(AI_TIMEOUT_MS) { geminiService.generate(request.prompt) }
+            val text = withAiTimeout(AI_TIMEOUT_MS) { aiTextGenerator.generate(request.prompt) }
             call.response.headers.append("X-Request-Id", requestId)
-            call.respond(GenerateAiResponse(text, geminiService.modelName))
-            GatewayObservability.success(requestId, "generate", geminiService.modelName, started)
+            call.respond(GenerateAiResponse(text, aiTextGenerator.modelName))
+            GatewayObservability.success(requestId, "generate", aiTextGenerator.modelName, started)
         } catch (e: IllegalArgumentException) {
             GatewayObservability.failure(requestId, "generate", "invalid_request", started)
             call.respond(HttpStatusCode.BadRequest, GatewayError("invalid_request", e.message ?: "invalid request", requestId))
@@ -69,7 +69,7 @@ fun Route.aiRoutes(
             call.respond(HttpStatusCode.GatewayTimeout, AiProposalError("timeout", "AI operation timed out", requestId))
         } catch (e: Exception) {
             GatewayObservability.failure(requestId, "propose", "ai_provider_error", started)
-            call.respond(HttpStatusCode.BadGateway, AiProposalError("ai_provider_error", "AI provider unavailable", requestId))
+            call.respond(HttpStatusCode.BadGateway, AiProposalError("ai_provider_error", "AI operation failed", requestId))
         }
     }
 
