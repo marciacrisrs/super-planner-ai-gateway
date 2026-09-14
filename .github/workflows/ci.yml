@@ -15,7 +15,9 @@ jobs:
           distribution: temurin
           java-version: '21'
       - uses: gradle/actions/setup-gradle@v4
-      - run: ./gradlew test
+        with:
+          gradle-version: '8.14.3'
+      - run: gradle test
         env:
           ENVIRONMENT: test
           GOOGLE_CLOUD_PROJECT: test-project
