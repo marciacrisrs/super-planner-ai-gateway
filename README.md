@@ -57,6 +57,8 @@ The Android `PlanningEngine` remains responsible for deterministic planning rule
 
 Mutating AI proposals/commands must carry explicit confirmation semantics. The gateway validates the response shape and safety boundary before returning it to the app.
 
+For `organize-week`, the gateway additionally grounds the provider response in the supplied domain context: summaries must reconcile with request facts, existing/fixed/desire proposals must reuse domain IDs and titles, fixed commitments must be preserved, and invalid logistics references are rejected before provider generation.
+
 ## Local tests
 
 ```bash
