@@ -3,6 +3,7 @@ plugins {
     kotlin("plugin.serialization") version "2.2.20"
     id("io.ktor.plugin") version "3.2.3"
     id("org.jlleitschuh.gradle.ktlint") version "14.2.0"
+    id("io.gitlab.arturbosch.detekt") version "2.0.0-alpha.6"
     jacoco
     application
 }
@@ -35,6 +36,11 @@ kotlin {
 ktlint {
     version.set("1.6.0")
     ignoreFailures.set(false)
+}
+
+detekt {
+    config.setFrom(files("$rootDir/config/detekt/detekt.yml"))
+    buildUponDefaultConfig = true
 }
 
 jacoco {
@@ -70,5 +76,5 @@ tasks.jacocoTestCoverageVerification {
 }
 
 tasks.check {
-    dependsOn(tasks.jacocoTestCoverageVerification, tasks.ktlintCheck)
+    dependsOn(tasks.jacocoTestCoverageVerification, tasks.ktlintCheck, tasks.detekt)
 }
