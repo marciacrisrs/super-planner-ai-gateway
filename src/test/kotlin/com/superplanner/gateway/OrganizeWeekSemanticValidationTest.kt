@@ -23,7 +23,7 @@ class OrganizeWeekSemanticValidationTest {
     fun `fixed commitment must not be omitted`() {
         val fixed = PlanItem("work", "Trabalho", "2026-09-14", "09:00", "18:00", required = true)
         assertFailsWith<IllegalStateException> {
-            OrganizeWeekService(FakeAi(responseWith())).organize(
+            OrganizeWeekService(FakeAi(responseWith()).organize(
                 OrganizeWeekRequest("2026-09-14", "America/Sao_Paulo", fixedCommitments = listOf(fixed))
             )
         }
@@ -114,10 +114,66 @@ class OrganizeWeekSemanticValidationTest {
         assertEquals("work", result.proposedItems.single().id)
     }
 
+    @Test
+    fun `domain item cannot be replaced by an invented id`() {
+        val desire = PlanItem("gym", "Academia", "2026-09-14", durationMinutes = 60)
+        val response = responseWith(
+            ProposedPlanItem("invented-gym", "Academia", "2026-09-14", "07:00", "08:00", "desire")
+        )
+        assertFailsWith<IllegalStateException> {
+            OrganizeWeekService(FakeAi(response)).organize(
+                OrganizeWeekRequest("2026-09-14", "America/Sao_Paulo", desires = listOf(desire))
+            )
+        }
+    }
+
+    @Test
+    fun `summary must match supplied context`() {
+        val fixed = PlanItem("work", "Trabalho", "2026-09-14", "09:00", "18:00", required = true)
+        val response = Json.encodeToString(
+            OrganizeWeekResponse.serializer(),
+            OrganizeWeekResponse(
+                summary = OrganizeWeekSummary(0, 0, 0, 0, 0, 1, 0),
+                proposedItems = listOf(
+                    ProposedPlanItem("work", "Trabalho", "2026-09-14", "09:00", "18:00", "fixed", fixed = true)
+                ),
+                conflicts = emptyList(),
+                opportunities = emptyList(),
+                explanations = emptyList(),
+            )
+        )
+        assertFailsWith<IllegalStateException> {
+            OrganizeWeekService(FakeAi(response)).organize(
+                OrganizeWeekRequest("2026-09-14", "America/Sao_Paulo", fixedCommitments = listOf(fixed))
+            )
+        }
+    }
+
+    @Test
+    fun `logistics must identify an affected item or route`() {
+        assertFailsWith<IllegalArgumentException> {
+            OrganizeWeekService(FakeAi(responseWith())).organize(
+                OrganizeWeekRequest(
+                    "2026-09-14",
+                    "America/Sao_Paulo",
+                    logistics = listOf(LogisticConstraint(type = "commute", minutes = 30))
+                )
+            )
+        }
+    }
+
     private fun responseWith(vararg items: ProposedPlanItem): String = Json.encodeToString(
         OrganizeWeekResponse.serializer(),
         OrganizeWeekResponse(
-            summary = OrganizeWeekSummary(0, 0, 0, 0, 0, 0, 0),
+            summary = OrganizeWeekSummary(
+                fixedCommitmentsConsidered = items.count { it.source == "fixed" },
+                desiresConsidered = items.count { it.source == "desire" },
+                commuteMinutesConsidered = 0,
+                preparationMinutesConsidered = 0,
+                aiSuggestionsConsidered = items.count { it.source == "ai_suggestion" },
+                conflictsFound = 0,
+                opportunitiesFound = 0,
+            ),
             proposedItems = items.toList(),
             conflicts = emptyList(),
             opportunities = emptyList(),
