@@ -54,12 +54,12 @@ fun Route.aiRoutes(
             call.response.headers.append("X-Request-Id", requestId)
             call.respond(aiProposalService.propose(request, requestId))
             GatewayObservability.success(requestId, "propose", aiProposalService.modelName, started)
-        } catch (e: IllegalArgumentException) {
-            GatewayObservability.failure(requestId, "propose", "invalid_request", started)
-            call.respond(HttpStatusCode.BadRequest, AiProposalError("invalid_request", e.message ?: "invalid request", requestId))
         } catch (e: InvalidAiProposalException) {
             GatewayObservability.failure(requestId, "propose", "invalid_ai_proposal", started)
             call.respond(HttpStatusCode.BadGateway, AiProposalError("invalid_ai_proposal", "AI proposal could not be validated", requestId))
+        } catch (e: IllegalArgumentException) {
+            GatewayObservability.failure(requestId, "propose", "invalid_request", started)
+            call.respond(HttpStatusCode.BadRequest, AiProposalError("invalid_request", e.message ?: "invalid request", requestId))
         } catch (e: Exception) {
             GatewayObservability.failure(requestId, "propose", "ai_provider_error", started)
             call.respond(HttpStatusCode.BadGateway, AiProposalError("ai_provider_error", "AI provider unavailable", requestId))
@@ -68,11 +68,10 @@ fun Route.aiRoutes(
 
     post("/v1/ai/organize-week") {
         if (!security.requireAccess(call)) return@post
-        capabilityRoute(call, "organize-week") { id ->
-            try {
-                call.respond(organizeWeekService.organize(call.receive()))
-            } catch (e: Exception) {
-                throw e
+        capabilityRoute(call, "organize-week") {
+            organizeWeekService.organize(call.receive()).let { response ->
+                call.respond(response)
+                GatewayObservability.success(GatewaySecurity.requestId(call), "organize-week", response.model, 0L)
             }
         }
     }
@@ -109,14 +108,15 @@ fun Route.aiRoutes(
 
 private suspend fun ApplicationCall.capabilityRoute(
     capability: String,
-    block: suspend (String) -> Unit,
+    block: suspend (String) -> AiCapabilityResponse,
 ) {
     val requestId = GatewaySecurity.requestId(this)
     val started = System.nanoTime()
     try {
         response.headers.append("X-Request-Id", requestId)
-        block(requestId)
-        GatewayObservability.success(requestId, capability, null, started)
+        val result = block(requestId)
+        respond(result)
+        GatewayObservability.success(requestId, capability, result.model, started)
     } catch (e: IllegalArgumentException) {
         GatewayObservability.failure(requestId, capability, "invalid_request", started)
         respond(HttpStatusCode.BadRequest, GatewayError("invalid_request", e.message ?: "invalid request", requestId))
