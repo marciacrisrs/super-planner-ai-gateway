@@ -12,12 +12,16 @@ import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
-fun Application.module() {
-    val geminiService = GeminiService()
+data class GatewayDependencies(
+    val aiTextGenerator: AiTextGenerator,
+    val security: GatewaySecurity,
+)
+
+fun Application.module(dependencies: GatewayDependencies = GatewayDependencies.production()) {
+    val geminiService = dependencies.aiTextGenerator
     val organizeWeekService = OrganizeWeekService(geminiService)
     val aiProposalService = AiProposalService(geminiService)
     val capabilityService = AiCapabilityService(geminiService)
-    val security = GatewaySecurity()
     val configurationReady = gatewayConfigurationReady()
 
     install(CallLogging)
@@ -45,7 +49,7 @@ fun Application.module() {
                 call.respond(HttpStatusCode.ServiceUnavailable, HealthResponse(status = "not_ready"))
             }
         }
-        aiRoutes(geminiService, organizeWeekService, aiProposalService, capabilityService, security)
+        aiRoutes(geminiService, organizeWeekService, aiProposalService, capabilityService, dependencies.security)
     }
 }
 
@@ -58,6 +62,11 @@ private fun gatewayConfigurationReady(): Boolean {
     return project.isNotBlank() && location.isNotBlank() && model.isNotBlank() &&
         (environment == "test" || apiKey.isNotBlank())
 }
+
+private fun GatewayDependencies.Companion.production(): GatewayDependencies =
+    GatewayDependencies(GeminiService(), GatewaySecurity())
+
+private companion object GatewayDependencies.Companion
 
 @Serializable
 data class HealthResponse(val status: String)
