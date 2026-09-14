@@ -12,6 +12,7 @@ import kotlinx.serialization.json.Json
 
 fun Application.module() {
     val geminiService = GeminiService()
+    val organizeWeekService = OrganizeWeekService(geminiService)
 
     install(CallLogging)
     install(ContentNegotiation) {
@@ -31,7 +32,7 @@ fun Application.module() {
             call.respond(HealthResponse(status = "ready"))
         }
 
-        aiRoutes(geminiService)
+        aiRoutes(geminiService, organizeWeekService)
     }
 }
 
