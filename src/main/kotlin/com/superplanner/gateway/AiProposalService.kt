@@ -3,6 +3,7 @@ package com.superplanner.gateway
 import java.util.UUID
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonPrimitive
 
 class AiProposalService(
@@ -90,13 +91,13 @@ class AiProposalService(
 
     private fun requireOptionalString(proposal: AiProposal, key: String) {
         val value = proposal.payload[key] ?: return
-        if (value is JsonPrimitive && value.content == "null" && !value.isString) return
+        if (value === JsonNull) return
         require(value is JsonPrimitive && value.isString) { "$key must be a string or null" }
     }
 
     private fun requireOptionalNumber(proposal: AiProposal, key: String) {
         val value = proposal.payload[key] ?: return
-        if (value is JsonPrimitive && value.content == "null" && !value.isString) return
+        if (value === JsonNull) return
         require(value is JsonPrimitive && !value.isString && value.content.toDoubleOrNull() != null) { "$key must be a number or null" }
     }
 
