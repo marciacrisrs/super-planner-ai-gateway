@@ -7,6 +7,8 @@ import io.ktor.server.request.receive
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.post
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -30,13 +32,16 @@ fun Route.aiRoutes(
             val request = call.receive<GenerateAiRequest>()
             require(request.prompt.isNotBlank()) { "prompt must not be blank" }
             require(request.prompt.length <= MAX_PROMPT_LENGTH) { "prompt exceeds maximum length" }
-            val text = geminiService.generate(request.prompt)
+            val text = withTimeout(AI_TIMEOUT_MS) { geminiService.generate(request.prompt) }
             call.response.headers.append("X-Request-Id", requestId)
             call.respond(GenerateAiResponse(text, geminiService.modelName))
             GatewayObservability.success(requestId, "generate", geminiService.modelName, started)
         } catch (e: IllegalArgumentException) {
             GatewayObservability.failure(requestId, "generate", "invalid_request", started)
             call.respond(HttpStatusCode.BadRequest, GatewayError("invalid_request", e.message ?: "invalid request", requestId))
+        } catch (e: TimeoutCancellationException) {
+            GatewayObservability.failure(requestId, "generate", "timeout", started)
+            call.respond(HttpStatusCode.GatewayTimeout, GatewayError("timeout", "AI operation timed out", requestId))
         } catch (e: Exception) {
             GatewayObservability.failure(requestId, "generate", "ai_provider_error", started)
             call.respond(HttpStatusCode.BadGateway, GatewayError("ai_provider_error", "AI provider unavailable", requestId))
@@ -50,15 +55,19 @@ fun Route.aiRoutes(
         try {
             val request = call.receive<AiProposalRequest>()
             require(request.message.length <= MAX_PROMPT_LENGTH) { "message exceeds maximum length" }
+            val response = withTimeout(AI_TIMEOUT_MS) { aiProposalService.propose(request, requestId) }
             call.response.headers.append("X-Request-Id", requestId)
-            call.respond(aiProposalService.propose(request, requestId))
-            GatewayObservability.success(requestId, "propose", aiProposalService.modelName, started)
+            call.respond(response)
+            GatewayObservability.success(requestId, "propose", response.model, started)
         } catch (e: InvalidAiProposalException) {
             GatewayObservability.failure(requestId, "propose", "invalid_ai_proposal", started)
             call.respond(HttpStatusCode.BadGateway, AiProposalError("invalid_ai_proposal", "AI proposal could not be validated", requestId))
         } catch (e: IllegalArgumentException) {
             GatewayObservability.failure(requestId, "propose", "invalid_request", started)
             call.respond(HttpStatusCode.BadRequest, AiProposalError("invalid_request", e.message ?: "invalid request", requestId))
+        } catch (e: TimeoutCancellationException) {
+            GatewayObservability.failure(requestId, "propose", "timeout", started)
+            call.respond(HttpStatusCode.GatewayTimeout, AiProposalError("timeout", "AI operation timed out", requestId))
         } catch (e: Exception) {
             GatewayObservability.failure(requestId, "propose", "ai_provider_error", started)
             call.respond(HttpStatusCode.BadGateway, AiProposalError("ai_provider_error", "AI provider unavailable", requestId))
@@ -71,13 +80,16 @@ fun Route.aiRoutes(
         val started = System.nanoTime()
         try {
             val request = call.receive<OrganizeWeekRequest>()
-            val response = organizeWeekService.organize(request)
+            val response = withTimeout(AI_TIMEOUT_MS) { organizeWeekService.organize(request) }
             call.response.headers.append("X-Request-Id", requestId)
             call.respond(response)
             GatewayObservability.success(requestId, "organize-week", response.model, started)
         } catch (e: IllegalArgumentException) {
             GatewayObservability.failure(requestId, "organize-week", "invalid_request", started)
             call.respond(HttpStatusCode.BadRequest, GatewayError("invalid_request", e.message ?: "invalid request", requestId))
+        } catch (e: TimeoutCancellationException) {
+            GatewayObservability.failure(requestId, "organize-week", "timeout", started)
+            call.respond(HttpStatusCode.GatewayTimeout, GatewayError("timeout", "AI operation timed out", requestId))
         } catch (e: Exception) {
             GatewayObservability.failure(requestId, "organize-week", "ai_error", started)
             call.respond(HttpStatusCode.BadGateway, GatewayError("ai_error", "AI operation failed", requestId))
@@ -122,16 +134,20 @@ private suspend fun ApplicationCall.capabilityRoute(
     val started = System.nanoTime()
     try {
         response.headers.append("X-Request-Id", requestId)
-        val result = block(requestId)
+        val result = withTimeout(AI_TIMEOUT_MS) { block(requestId) }
         respond(result)
         GatewayObservability.success(requestId, capability, result.model, started)
     } catch (e: IllegalArgumentException) {
         GatewayObservability.failure(requestId, capability, "invalid_request", started)
         respond(HttpStatusCode.BadRequest, GatewayError("invalid_request", e.message ?: "invalid request", requestId))
+    } catch (e: TimeoutCancellationException) {
+        GatewayObservability.failure(requestId, capability, "timeout", started)
+        respond(HttpStatusCode.GatewayTimeout, GatewayError("timeout", "AI operation timed out", requestId))
     } catch (e: Exception) {
         GatewayObservability.failure(requestId, capability, "ai_error", started)
         respond(HttpStatusCode.BadGateway, GatewayError("ai_error", "AI operation failed", requestId))
     }
 }
 
+private val AI_TIMEOUT_MS: Long = System.getenv("AI_TIMEOUT_MS")?.toLongOrNull()?.coerceIn(1_000, 120_000) ?: 30_000
 private const val MAX_PROMPT_LENGTH = 12000
