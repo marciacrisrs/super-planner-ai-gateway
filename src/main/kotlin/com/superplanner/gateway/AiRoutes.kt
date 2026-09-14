@@ -8,7 +8,6 @@ import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.post
 import kotlinx.coroutines.TimeoutCancellationException
-import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -32,7 +31,7 @@ fun Route.aiRoutes(
             val request = call.receive<GenerateAiRequest>()
             require(request.prompt.isNotBlank()) { "prompt must not be blank" }
             require(request.prompt.length <= MAX_PROMPT_LENGTH) { "prompt exceeds maximum length" }
-            val text = withTimeout(AI_TIMEOUT_MS) { geminiService.generate(request.prompt) }
+            val text = withAiTimeout(AI_TIMEOUT_MS) { geminiService.generate(request.prompt) }
             call.response.headers.append("X-Request-Id", requestId)
             call.respond(GenerateAiResponse(text, geminiService.modelName))
             GatewayObservability.success(requestId, "generate", geminiService.modelName, started)
@@ -55,7 +54,7 @@ fun Route.aiRoutes(
         try {
             val request = call.receive<AiProposalRequest>()
             require(request.message.length <= MAX_PROMPT_LENGTH) { "message exceeds maximum length" }
-            val response = withTimeout(AI_TIMEOUT_MS) { aiProposalService.propose(request, requestId) }
+            val response = withAiTimeout(AI_TIMEOUT_MS) { aiProposalService.propose(request, requestId) }
             call.response.headers.append("X-Request-Id", requestId)
             call.respond(response)
             GatewayObservability.success(requestId, "propose", response.model, started)
@@ -80,7 +79,7 @@ fun Route.aiRoutes(
         val started = System.nanoTime()
         try {
             val request = call.receive<OrganizeWeekRequest>()
-            val response = withTimeout(AI_TIMEOUT_MS) { organizeWeekService.organize(request) }
+            val response = withAiTimeout(AI_TIMEOUT_MS) { organizeWeekService.organize(request) }
             call.response.headers.append("X-Request-Id", requestId)
             call.respond(response)
             GatewayObservability.success(requestId, "organize-week", response.model, started)
@@ -134,7 +133,7 @@ private suspend fun ApplicationCall.capabilityRoute(
     val started = System.nanoTime()
     try {
         response.headers.append("X-Request-Id", requestId)
-        val result = withTimeout(AI_TIMEOUT_MS) { block(requestId) }
+        val result = withAiTimeout(AI_TIMEOUT_MS) { block(requestId) }
         respond(result)
         GatewayObservability.success(requestId, capability, result.model, started)
     } catch (e: IllegalArgumentException) {
