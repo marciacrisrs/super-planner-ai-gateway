@@ -32,6 +32,7 @@ All AI routes return `X-Request-Id` and use schema version `1` for structured co
 - `GEMINI_MODEL` — required model in production.
 - `GATEWAY_API_KEY` — required gateway credential in production.
 - `GATEWAY_RATE_LIMIT` — requests per minute per credential; defaults to `60`.
+- `AI_TIMEOUT_MS` — AI operation timeout in milliseconds; defaults to `30000` and is clamped to 1–120 seconds.
 - `ENVIRONMENT` — use `test` only for automated tests.
 
 Provider authentication uses the server's Google Cloud identity/ADC. The gateway API credential is separate from the provider credential.
@@ -40,7 +41,13 @@ Provider authentication uses the server's Google Cloud identity/ADC. The gateway
 
 The current API-key layer is an MVP access-control boundary. A static gateway key must **not** be embedded in a public Android APK because it can be extracted. For a public mobile client, replace or augment it with user/device authentication and a server-verifiable token before treating the endpoint as production-grade authorization.
 
+Request bodies and capability lists are bounded before provider generation. Provider operations are time-limited, and malformed provider output is rejected before it reaches the Android client.
+
 The rate limiter is in-memory and therefore scoped to a single Cloud Run instance. It is a protection layer, not a distributed quota system.
+
+## Observability
+
+Structured logs expose request ID, capability, model, total request latency and categorized failures. Provider calls additionally record provider latency and model. Prompts, generated responses, credentials and other sensitive request data are not logged.
 
 ## Contract and domain boundary
 
