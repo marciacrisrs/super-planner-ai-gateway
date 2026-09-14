@@ -4,6 +4,7 @@ import java.util.UUID
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 
 class AiProposalService(
@@ -17,7 +18,7 @@ class AiProposalService(
 
         val raw = aiTextGenerator.generate(buildPrompt(request))
         val proposal = try {
-            json.decodeFromString(AiProposal.serializer(), cleanJson(raw)).also(::validateProposal)
+            json.decodeFromString(AiProposal.serializer(), cleanJson(raw)).also { validateProposal(it, request) }
         } catch (exception: Exception) {
             throw InvalidAiProposalException("AI returned an invalid proposal", exception)
         }
@@ -79,7 +80,7 @@ class AiProposalService(
         ${json.encodeToString(AiProposalRequest.serializer(), request)}
     """.trimIndent()
 
-    private fun validateProposal(proposal: AiProposal) {
+    private fun validateProposal(proposal: AiProposal, request: AiProposalRequest) {
         require(proposal.commandType in SUPPORTED_COMMANDS) { "unsupported commandType" }
         require(proposal.explanation.isNotBlank()) { "explanation must not be blank" }
         require(proposal.payload.isNotEmpty() || proposal.commandType == "RECALCULATE_ROUTE") { "payload must not be empty" }
@@ -95,11 +96,13 @@ class AiProposalService(
                 requireOptionalNumber(proposal, "durationMinutes")
                 requireOptionalString(proposal, "recurrence")
             }
-            "CANCEL_ACTIVITY" -> requireString(proposal, "activityId")
+            "CANCEL_ACTIVITY" -> {
+                requireExistingActivityId(proposal, request)
+            }
             "CHANGE_ACTIVITY" -> {
-                requireString(proposal, "activityId")
+                requireExistingActivityId(proposal, request)
                 val changes = proposal.payload["changes"]
-                require(changes is kotlinx.serialization.json.JsonObject && changes.isNotEmpty()) { "changes must be a non-empty object" }
+                require(changes is JsonObject && changes.isNotEmpty()) { "changes must be a non-empty object" }
                 validateChangeFields(changes)
             }
             "EXPLAIN_NEXT_ACTIVITY" -> {
@@ -112,7 +115,16 @@ class AiProposalService(
         }
     }
 
-    private fun validateChangeFields(changes: kotlinx.serialization.json.JsonObject) {
+    private fun requireExistingActivityId(proposal: AiProposal, request: AiProposalRequest) {
+        val contextActivityId = request.context.activeActivityId
+        require(!contextActivityId.isNullOrBlank()) { "existing activity id is required for activity mutation" }
+        requireString(proposal, "activityId")
+        require(proposal.payload["activityId"]?.let { (it as? JsonPrimitive)?.content } == contextActivityId) {
+            "activityId must match the explicitly supplied active activity"
+        }
+    }
+
+    private fun validateChangeFields(changes: JsonObject) {
         val allowed = setOf("title", "date", "startTime", "durationMinutes")
         require(changes.keys.all(allowed::contains)) { "changes contains an unsupported field" }
         require(changes.values.any { it !is JsonNull }) { "changes must contain at least one concrete value" }
@@ -126,14 +138,14 @@ class AiProposalService(
         requireString(proposal.payload, key)
     }
 
-    private fun requireString(objectValue: kotlinx.serialization.json.JsonObject, key: String) {
+    private fun requireString(objectValue: JsonObject, key: String) {
         val value = objectValue[key] as? JsonPrimitive
         require(value != null && value.isString && value.content.isNotBlank()) { "$key must be a non-blank string" }
     }
 
     private fun requireOptionalString(proposal: AiProposal, key: String) = requireOptionalString(proposal.payload, key)
 
-    private fun requireOptionalString(objectValue: kotlinx.serialization.json.JsonObject, key: String) {
+    private fun requireOptionalString(objectValue: JsonObject, key: String) {
         val value = objectValue[key] ?: return
         if (value === JsonNull) return
         require(value is JsonPrimitive && value.isString) { "$key must be a string or null" }
@@ -141,7 +153,7 @@ class AiProposalService(
 
     private fun requireOptionalNumber(proposal: AiProposal, key: String) = requireOptionalNumber(proposal.payload, key)
 
-    private fun requireOptionalNumber(objectValue: kotlinx.serialization.json.JsonObject, key: String) {
+    private fun requireOptionalNumber(objectValue: JsonObject, key: String) {
         val value = objectValue[key] ?: return
         if (value === JsonNull) return
         require(value is JsonPrimitive && !value.isString && value.content.toDoubleOrNull() != null) { "$key must be a number or null" }
