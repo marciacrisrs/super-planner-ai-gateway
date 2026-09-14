@@ -21,7 +21,8 @@ data class GenerateAiResponse(
 
 fun Route.aiRoutes(
     geminiService: GeminiService,
-    organizeWeekService: OrganizeWeekService
+    organizeWeekService: OrganizeWeekService,
+    aiProposalService: AiProposalService,
 ) {
     post("/v1/ai/generate") {
         val request = call.receive<GenerateAiRequest>()
@@ -37,6 +38,32 @@ fun Route.aiRoutes(
                 model = geminiService.modelName
             )
         )
+    }
+
+    post("/v1/ai/propose") {
+        val request = call.receive<AiProposalRequest>()
+        val requestId = call.request.headers["X-Request-Id"]
+            ?.takeIf { it.isNotBlank() }
+            ?: java.util.UUID.randomUUID().toString()
+
+        try {
+            call.respond(aiProposalService.propose(request, requestId))
+        } catch (exception: IllegalArgumentException) {
+            call.respond(
+                HttpStatusCode.BadRequest,
+                AiProposalError("invalid_request", exception.message ?: "invalid request", requestId),
+            )
+        } catch (exception: InvalidAiProposalException) {
+            call.respond(
+                HttpStatusCode.BadGateway,
+                AiProposalError("invalid_ai_proposal", "AI proposal could not be validated", requestId),
+            )
+        } catch (exception: Exception) {
+            call.respond(
+                HttpStatusCode.BadGateway,
+                AiProposalError("ai_provider_error", "AI provider unavailable", requestId),
+            )
+        }
     }
 
     post("/v1/ai/organize-week") {
