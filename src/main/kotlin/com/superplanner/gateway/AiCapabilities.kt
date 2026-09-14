@@ -2,7 +2,9 @@ package com.superplanner.gateway
 
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 
 @Serializable
 data class NaturalLanguageRequest(val schemaVersion: String = "1", val message: String, val context: AiProposalContext = AiProposalContext())
@@ -68,16 +70,14 @@ class AiCapabilityService(
         """.trimIndent())
     }
 
-    fun preference(request: PreferenceRequest, requestId: String): AiCapabilityResponse {
-        require(request.schemaVersion == "1") { "unsupported schemaVersion" }
-        return generate(requestId, """
+    fun preference(request: PreferenceRequest, requestId: String): AiCapabilityResponse =
+        generate(requestId, """
             Infer stable planning preferences only when the observations provide sufficient evidence.
             One isolated observation is not enough. Do not persist anything.
             Return ONLY JSON:
             {"preferences":[{"preference":string,"evidence":[string],"confidence":"HIGH|MEDIUM|LOW"}]}
             Observations: ${json.encodeToString(PreferenceRequest.serializer(), request)}
         """.trimIndent())
-    }
 
     fun scenario(request: ScenarioRequest, requestId: String): AiCapabilityResponse {
         validate(request.schemaVersion, request.question)
@@ -92,14 +92,30 @@ class AiCapabilityService(
 
     fun nextAction(request: NextActionRequest, requestId: String): AiCapabilityResponse {
         require(request.schemaVersion == "1") { "unsupported schemaVersion" }
-        return generate(requestId, """
+        require(request.candidates.distinct().size == request.candidates.size) { "candidates must be unique" }
+        val response = generate(requestId, """
             Recommend a next action from the supplied planning context.
-            Never claim an action is feasible when the context does not establish that.
+            The candidate list is a domain-owned feasibility boundary. You MUST return a recommendedAction that is exactly one of the supplied candidates, or null when no candidate is feasible.
+            Never invent time, capacity, priorities, dependencies, preparation or travel facts.
             Consider available time, priorities, dependencies, preparation and travel facts when present.
             Return ONLY JSON:
-            {"recommendedAction":string,"reason":string,"alternatives":[string],"confidence":"HIGH|MEDIUM|LOW"}
+            {"recommendedAction":"candidate id or null","reason":string,"alternatives":["candidate ids"],"confidence":"HIGH|MEDIUM|LOW"}
+            Alternatives must also come only from the candidate list and must contain at most two items.
             Request: ${json.encodeToString(NextActionRequest.serializer(), request)}
         """.trimIndent())
+
+        val recommended = response.result["recommendedAction"]
+            ?.let { (it as? JsonPrimitive)?.content }
+            ?.takeIf { it.isNotBlank() && it != "null" }
+        require(recommended == null || recommended in request.candidates) { "AI recommended a non-eligible candidate" }
+
+        val alternatives = response.result["alternatives"] as? JsonArray
+            ?: throw IllegalArgumentException("next-action response must contain alternatives")
+        require(alternatives.size <= 2) { "next-action response has too many alternatives" }
+        require(alternatives.all { it is JsonPrimitive && it.content in request.candidates }) {
+            "next-action alternatives contain a non-eligible candidate"
+        }
+        return response
     }
 
     private fun validate(schemaVersion: String, message: String) {
