@@ -97,31 +97,38 @@ fun Route.aiRoutes(
 
     post("/v1/ai/natural-language") {
         if (!security.requireAccess(call)) return@post
-        capabilityRoute(call, "natural-language") { id -> capabilityService.naturalLanguage(call.receive<NaturalLanguageRequest>(), id) }
+        val request = call.receive<NaturalLanguageRequest>()
+        capabilityRoute(call, "natural-language") { id -> capabilityService.naturalLanguage(request, id) }
     }
     post("/v1/ai/explain") {
         if (!security.requireAccess(call)) return@post
-        capabilityRoute(call, "explain") { id -> capabilityService.explanation(call.receive<ExplanationRequest>(), id) }
+        val request = call.receive<ExplanationRequest>()
+        capabilityRoute(call, "explain") { id -> capabilityService.explanation(request, id) }
     }
     post("/v1/ai/command") {
         if (!security.requireAccess(call)) return@post
-        capabilityRoute(call, "command") { id -> capabilityService.command(call.receive<CommandRequest>(), id) }
+        val request = call.receive<CommandRequest>()
+        capabilityRoute(call, "command") { id -> capabilityService.command(request, id) }
     }
     post("/v1/ai/insights") {
         if (!security.requireAccess(call)) return@post
-        capabilityRoute(call, "insights") { id -> capabilityService.insight(call.receive<InsightRequest>(), id) }
+        val request = call.receive<InsightRequest>()
+        capabilityRoute(call, "insights") { id -> capabilityService.insight(request, id) }
     }
     post("/v1/ai/preferences") {
         if (!security.requireAccess(call)) return@post
-        capabilityRoute(call, "preferences") { id -> capabilityService.preference(call.receive<PreferenceRequest>(), id) }
+        val request = call.receive<PreferenceRequest>()
+        capabilityRoute(call, "preferences") { id -> capabilityService.preference(request, id) }
     }
     post("/v1/ai/scenario") {
         if (!security.requireAccess(call)) return@post
-        capabilityRoute(call, "scenario") { id -> capabilityService.scenario(call.receive<ScenarioRequest>(), id) }
+        val request = call.receive<ScenarioRequest>()
+        capabilityRoute(call, "scenario") { id -> capabilityService.scenario(request, id) }
     }
     post("/v1/ai/next-action") {
         if (!security.requireAccess(call)) return@post
-        capabilityRoute(call, "next-action") { id -> capabilityService.nextAction(call.receive<NextActionRequest>(), id) }
+        val request = call.receive<NextActionRequest>()
+        capabilityRoute(call, "next-action") { id -> capabilityService.nextAction(request, id) }
     }
 }
 
