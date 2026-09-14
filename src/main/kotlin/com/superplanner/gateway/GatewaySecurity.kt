@@ -16,16 +16,19 @@ class GatewaySecurity(
             return false
         }
         val supplied = call.request.headers["X-Gateway-Api-Key"]?.trim()
-        if (supplied.isNullOrBlank() || !constantTimeEquals(supplied, expectedApiKey)) {
+        if (!credentialsMatch(supplied)) {
             call.respond(HttpStatusCode.Unauthorized, GatewayError("unauthorized", "Invalid gateway credentials", requestId(call)))
             return false
         }
-        if (!rateLimiter.allow(supplied)) {
+        if (!rateLimiter.allow(supplied!!)) {
             call.respond(HttpStatusCode.TooManyRequests, GatewayError("rate_limited", "Too many requests", requestId(call)))
             return false
         }
         return true
     }
+
+    internal fun credentialsMatch(supplied: String?): Boolean =
+        !supplied.isNullOrBlank() && constantTimeEquals(supplied, expectedApiKey)
 
     companion object {
         fun requestId(call: ApplicationCall): String =
