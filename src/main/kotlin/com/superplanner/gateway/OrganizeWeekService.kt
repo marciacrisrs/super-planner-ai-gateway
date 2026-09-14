@@ -47,20 +47,31 @@ class OrganizeWeekService(
             require(it.type.isNotBlank()) { "logistics type must not be blank" }
             it.beforeItemId?.let { id -> require(id in knownItemIds) { "unknown logistics beforeItemId" } }
             it.afterItemId?.let { id -> require(id in knownItemIds) { "unknown logistics afterItemId" } }
+            require(it.beforeItemId != null || it.afterItemId != null || it.origin != null || it.destination != null) {
+                "logistics must identify an affected item or route"
+            }
         }
         request.capacity?.let { capacity ->
-            require(capacity.totalCapacityMinutes >= 0)
-            require(capacity.totalDesiredMinutes >= 0)
-            require(capacity.totalRemainingMinutes >= 0)
+            require(capacity.totalCapacityMinutes >= 0) { "totalCapacityMinutes must be non-negative" }
+            require(capacity.totalDesiredMinutes >= 0) { "totalDesiredMinutes must be non-negative" }
+            require(capacity.totalRemainingMinutes >= 0) { "totalRemainingMinutes must be non-negative" }
+            require(capacity.days.size <= MAX_LIST_ITEMS) { "capacity has too many days" }
             capacity.days.forEach {
-                require(it.schedulableMinutes >= 0)
-                require(it.desiredMinutes >= 0)
-                require(it.remainingMinutes >= 0)
+                require(it.date.isNotBlank()) { "capacity day date must not be blank" }
+                require(it.load.isNotBlank()) { "capacity day load must not be blank" }
+                require(it.schedulableMinutes >= 0) { "schedulableMinutes must be non-negative" }
+                require(it.desiredMinutes >= 0) { "desiredMinutes must be non-negative" }
+                require(it.remainingMinutes >= 0) { "remainingMinutes must be non-negative" }
             }
+            require(capacity.load.isNotBlank()) { "capacity load must not be blank" }
+            require(capacity.reasons.all { it.length <= MAX_STRING_LENGTH }) { "capacity contains an oversized reason" }
         }
     }
 
     private fun validateResponse(request: OrganizeWeekRequest, response: OrganizeWeekResponse) {
+        validateSummary(request, response)
+
+        val knownItems = (request.existingPlan + request.fixedCommitments + request.desires).associateBy { it.id }
         val proposedIds = response.proposedItems.map { it.id }
         require(proposedIds.all(String::isNotBlank)) { "proposed item ids must not be blank" }
         require(proposedIds.distinct().size == proposedIds.size) { "proposed item ids must be unique" }
@@ -70,6 +81,13 @@ class OrganizeWeekService(
             val start = parseTime(item.startTime, "startTime")
             val end = parseTime(item.endTime, "endTime")
             require(start.isBefore(end)) { "proposed item endTime must be after startTime" }
+            when (item.source) {
+                "existing", "fixed", "desire" -> {
+                    val original = knownItems[item.id]
+                        ?: throw IllegalArgumentException("proposal ${item.id} was not supplied by the domain")
+                    require(original.title == item.title) { "proposal ${item.id} changed domain title" }
+                }
+            }
         }
 
         val fixedProposals = request.fixedCommitments.associateBy { it.id }
@@ -114,6 +132,31 @@ class OrganizeWeekService(
         }
     }
 
+    private fun validateSummary(request: OrganizeWeekRequest, response: OrganizeWeekResponse) {
+        val summary = response.summary
+        require(summary.fixedCommitmentsConsidered == request.fixedCommitments.size) {
+            "summary.fixedCommitmentsConsidered does not match request"
+        }
+        require(summary.desiresConsidered == request.desires.size) {
+            "summary.desiresConsidered does not match request"
+        }
+        require(summary.aiSuggestionsConsidered == request.aiTips.size) {
+            "summary.aiSuggestionsConsidered does not match request"
+        }
+        require(summary.commuteMinutesConsidered == request.logistics.filter { it.type.equals("commute", ignoreCase = true) }.sumOf { it.minutes }) {
+            "summary.commuteMinutesConsidered does not match request logistics"
+        }
+        require(summary.preparationMinutesConsidered == request.logistics.filter { it.type.equals("preparation", ignoreCase = true) }.sumOf { it.minutes }) {
+            "summary.preparationMinutesConsidered does not match request logistics"
+        }
+        require(summary.conflictsFound == response.conflicts.size) {
+            "summary.conflictsFound does not match response conflicts"
+        }
+        require(summary.opportunitiesFound == response.opportunities.size) {
+            "summary.opportunitiesFound does not match response opportunities"
+        }
+    }
+
     private fun List<PlanItem>.validatePlanItems(name: String) {
         require(size <= MAX_LIST_ITEMS) { "$name has too many items" }
         val ids = map { it.id }
@@ -154,6 +197,9 @@ class OrganizeWeekService(
         12. AI tips are suggestions, never mandatory commitments.
         13. Preserve the original plan; the response is a proposal for review, not an automatic mutation.
         14. Every proposed item must identify its source: existing, fixed, desire, logistics, or ai_suggestion.
+        15. The summary counts must exactly reflect the supplied request and returned conflicts/opportunities.
+        16. For existing, fixed and desire proposals, reuse the exact supplied item id and title. Never invent a replacement id.
+        17. A proposal sourced from ai_suggestion may use a new id, but it must remain clearly identified as an AI suggestion.
 
         Output this exact JSON shape:
         {
