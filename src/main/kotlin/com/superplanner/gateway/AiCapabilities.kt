@@ -59,6 +59,7 @@ class AiCapabilityService(
             Return ONLY JSON:
             {"commandType":"MARK_DELAYED|CANCEL_ACTIVITY|CREATE_ACTIVITY_DRAFT|CHANGE_ACTIVITY|REORGANIZE_DAY|MISSING_INFORMATION",
              "requiresConfirmation":true,"payload":{},"explanation":string}
+            Payload schemas are strict. Use only fields allowed by the selected command.
             Unknown or ambiguous requests must use MISSING_INFORMATION.
             Request: ${json.encodeToString(CommandRequest.serializer(), request)}
         """.trimIndent(), ::validateCommand)
@@ -181,6 +182,51 @@ class AiCapabilityService(
         requireString(result, "explanation")
         val command = (result["commandType"] as JsonPrimitive).content
         if (command != "MISSING_INFORMATION") require(result["requiresConfirmation"]?.toString() == "true") { "command proposals require confirmation" }
+        validateCommandPayload(command, result["payload"] as JsonObject)
+    }
+
+    private fun validateCommandPayload(command: String, payload: JsonObject) {
+        when (command) {
+            "MARK_DELAYED" -> {
+                requireExactKeys(payload, setOf("activityId", "delayMinutes"), "MARK_DELAYED")
+                requireString(payload, "activityId")
+                requirePositiveInteger(payload, "delayMinutes")
+            }
+            "CANCEL_ACTIVITY" -> {
+                requireExactKeys(payload, setOf("activityId"), "CANCEL_ACTIVITY")
+                requireString(payload, "activityId")
+            }
+            "CREATE_ACTIVITY_DRAFT" -> {
+                require(payload.keys.contains("title")) { "CREATE_ACTIVITY_DRAFT requires title" }
+                requireString(payload, "title")
+                val allowed = setOf("title", "date", "startTime", "durationMinutes", "recurrence")
+                require(payload.keys.all { it in allowed }) { "CREATE_ACTIVITY_DRAFT contains unsupported fields" }
+                listOf("date", "startTime", "recurrence").forEach { key ->
+                    if (payload.containsKey(key)) requireString(payload, key)
+                }
+                if (payload.containsKey("durationMinutes")) requirePositiveInteger(payload, "durationMinutes")
+            }
+            "CHANGE_ACTIVITY" -> {
+                requireExactKeys(payload, setOf("activityId", "changes"), "CHANGE_ACTIVITY")
+                requireString(payload, "activityId")
+                val changes = payload["changes"] as? JsonObject
+                require(changes != null && changes.isNotEmpty()) { "CHANGE_ACTIVITY changes must be a non-empty object" }
+            }
+            "REORGANIZE_DAY" -> {
+                require(payload.isNotEmpty()) { "REORGANIZE_DAY payload must not be empty" }
+                val allowed = setOf("date", "reason", "constraints")
+                require(payload.keys.all { it in allowed }) { "REORGANIZE_DAY contains unsupported fields" }
+                require(payload.keys.any { it in allowed }) { "REORGANIZE_DAY requires planning context" }
+                if (payload.containsKey("date")) requireString(payload, "date")
+                if (payload.containsKey("reason")) requireString(payload, "reason")
+                if (payload.containsKey("constraints")) requireStringArray(payload, "constraints")
+            }
+            "MISSING_INFORMATION" -> {
+                requireExactKeys(payload, setOf("missingFields"), "MISSING_INFORMATION")
+                requireStringArray(payload, "missingFields")
+                require((payload["missingFields"] as JsonArray).isNotEmpty()) { "MISSING_INFORMATION requires at least one missing field" }
+            }
+        }
     }
 
     private fun validateInsights(result: JsonObject) {
@@ -238,7 +284,16 @@ class AiCapabilityService(
         require(value != null && !value.isString && value.content in setOf("true", "false")) { "$key must be a boolean" }
     }
 
+    private fun requirePositiveInteger(result: JsonObject, key: String) {
+        val value = result[key] as? JsonPrimitive
+        require(value != null && !value.isString && value.content.toIntOrNull()?.let { it > 0 } == true) { "$key must be a positive integer" }
+    }
+
     private fun requireObject(result: JsonObject, key: String) { require(result[key] is JsonObject) { "$key must be an object" } }
+
+    private fun requireExactKeys(payload: JsonObject, expected: Set<String>, command: String) {
+        require(payload.keys == expected) { "$command payload must contain exactly: ${expected.sorted().joinToString(", ")}" }
+    }
 
     private fun requireStringArray(result: JsonObject, key: String) {
         val value = result[key]
