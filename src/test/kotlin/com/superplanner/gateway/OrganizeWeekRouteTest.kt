@@ -87,6 +87,35 @@ class OrganizeWeekRouteTest {
         assertTrue(response.bodyAsText().contains("weekStart must not be blank"))
     }
 
+    @Test
+    fun `organize-week classifies invalid AI output as gateway error`() = testApplication {
+        application {
+            module(
+                GatewayDependencies(
+                    aiTextGenerator = FakeAi("{}"),
+                    security = GatewaySecurity(environment = "test"),
+                )
+            )
+        }
+
+        val response = client.post("/v1/ai/organize-week") {
+            header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+            header("X-Request-Id", "route-test-3")
+            setBody(
+                """
+                {
+                  "weekStart":"2026-09-14",
+                  "timezone":"America/Sao_Paulo"
+                }
+                """.trimIndent()
+            )
+        }
+
+        assertEquals(HttpStatusCode.BadGateway, response.status)
+        assertEquals("route-test-3", response.headers["X-Request-Id"])
+        assertTrue(response.bodyAsText().contains("\"invalid_ai_response\""))
+    }
+
     private class FakeAi(private val response: String) : AiTextGenerator {
         override val modelName: String = "fake-model"
         override fun generate(prompt: String): String = response
