@@ -10,6 +10,13 @@ plugins {
     application
 }
 
+allprojects {
+    dependencyLocking {
+        lockAllConfigurations()
+        lockMode = org.gradle.api.artifacts.dsl.LockMode.STRICT
+    }
+}
+
 group = "com.superplanner"
 version = "0.1.0"
 
@@ -43,6 +50,20 @@ ktlint {
 detekt {
     config.setFrom(files("$rootDir/config/detekt/detekt.yml"))
     buildUponDefaultConfig = true
+}
+
+tasks.register("resolveAndLockAll") {
+    group = "dependency management"
+    description = "Resolves all lockable configurations and writes Gradle dependency lockfiles."
+    notCompatibleWithConfigurationCache("Resolves configurations dynamically to persist dependency locks")
+    doFirst {
+        require(gradle.startParameter.isWriteDependencyLocks) { "Run this task with --write-locks" }
+    }
+    doLast {
+        allprojects.forEach { project ->
+            project.configurations.filter { it.isCanBeResolved }.forEach { it.resolve() }
+        }
+    }
 }
 
 sonar {
