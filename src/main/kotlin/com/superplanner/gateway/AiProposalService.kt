@@ -2,8 +2,6 @@ package com.superplanner.gateway
 
 import java.util.UUID
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.jsonObject
 
 class AiProposalService(
     private val aiTextGenerator: AiTextGenerator,
@@ -15,12 +13,11 @@ class AiProposalService(
 
         val raw = aiTextGenerator.generate(buildPrompt(request))
         val proposal = try {
-            json.decodeFromString(AiProposal.serializer(), cleanJson(raw))
+            json.decodeFromString(AiProposal.serializer(), cleanJson(raw)).also(::validateProposal)
         } catch (exception: Exception) {
             throw InvalidAiProposalException("AI returned an invalid proposal", exception)
         }
 
-        validateProposal(proposal)
         return AiProposalEnvelope(
             schemaVersion = CURRENT_SCHEMA_VERSION,
             requestId = requestId,
