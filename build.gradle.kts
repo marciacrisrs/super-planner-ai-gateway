@@ -12,10 +12,6 @@ application {
     mainClass.set("com.superplanner.gateway.ApplicationKt")
 }
 
-repositories {
-    mavenCentral()
-}
-
 dependencies {
     implementation("io.ktor:ktor-server-core-jvm")
     implementation("io.ktor:ktor-server-netty-jvm")
