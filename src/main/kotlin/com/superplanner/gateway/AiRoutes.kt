@@ -1,6 +1,7 @@
 package com.superplanner.gateway
 
 import io.ktor.http.HttpStatusCode
+import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.call
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
@@ -52,7 +53,7 @@ fun Route.aiRoutes(
             require(request.message.length <= MAX_PROMPT_LENGTH) { "message exceeds maximum length" }
             call.response.headers.append("X-Request-Id", requestId)
             call.respond(aiProposalService.propose(request, requestId))
-            GatewayObservability.success(requestId, "propose", aiProposalService.modelName(), started)
+            GatewayObservability.success(requestId, "propose", aiProposalService.modelName, started)
         } catch (e: IllegalArgumentException) {
             GatewayObservability.failure(requestId, "propose", "invalid_request", started)
             call.respond(HttpStatusCode.BadRequest, AiProposalError("invalid_request", e.message ?: "invalid request", requestId))
@@ -67,57 +68,54 @@ fun Route.aiRoutes(
 
     post("/v1/ai/organize-week") {
         if (!security.requireAccess(call)) return@post
-        val requestId = GatewaySecurity.requestId(call)
-        val started = System.nanoTime()
-        try {
-            call.response.headers.append("X-Request-Id", requestId)
-            call.respond(organizeWeekService.organize(call.receive()))
-            GatewayObservability.success(requestId, "organize-week", geminiService.modelName, started)
-        } catch (e: Exception) {
-            GatewayObservability.failure(requestId, "organize-week", "ai_error", started)
-            call.respond(HttpStatusCode.BadGateway, GatewayError("ai_error", "AI operation failed", requestId))
+        capabilityRoute(call, "organize-week") { id ->
+            try {
+                call.respond(organizeWeekService.organize(call.receive()))
+            } catch (e: Exception) {
+                throw e
+            }
         }
     }
 
     post("/v1/ai/natural-language") {
         if (!security.requireAccess(call)) return@post
-        capabilityRoute(call, security, "natural-language") { id -> capabilityService.naturalLanguage(call.receive(), id) }
+        capabilityRoute(call, "natural-language") { id -> capabilityService.naturalLanguage(call.receive(), id) }
     }
     post("/v1/ai/explain") {
         if (!security.requireAccess(call)) return@post
-        capabilityRoute(call, security, "explain") { id -> capabilityService.explanation(call.receive(), id) }
+        capabilityRoute(call, "explain") { id -> capabilityService.explanation(call.receive(), id) }
     }
     post("/v1/ai/command") {
         if (!security.requireAccess(call)) return@post
-        capabilityRoute(call, security, "command") { id -> capabilityService.command(call.receive(), id) }
+        capabilityRoute(call, "command") { id -> capabilityService.command(call.receive(), id) }
     }
     post("/v1/ai/insights") {
         if (!security.requireAccess(call)) return@post
-        capabilityRoute(call, security, "insights") { id -> capabilityService.insight(call.receive(), id) }
+        capabilityRoute(call, "insights") { id -> capabilityService.insight(call.receive(), id) }
     }
     post("/v1/ai/preferences") {
         if (!security.requireAccess(call)) return@post
-        capabilityRoute(call, security, "preferences") { id -> capabilityService.preference(call.receive(), id) }
+        capabilityRoute(call, "preferences") { id -> capabilityService.preference(call.receive(), id) }
     }
     post("/v1/ai/scenario") {
         if (!security.requireAccess(call)) return@post
-        capabilityRoute(call, security, "scenario") { id -> capabilityService.scenario(call.receive(), id) }
+        capabilityRoute(call, "scenario") { id -> capabilityService.scenario(call.receive(), id) }
     }
     post("/v1/ai/next-action") {
         if (!security.requireAccess(call)) return@post
-        capabilityRoute(call, security, "next-action") { id -> capabilityService.nextAction(call.receive(), id) }
+        capabilityRoute(call, "next-action") { id -> capabilityService.nextAction(call.receive(), id) }
     }
 }
 
-private suspend fun io.ktor.server.application.ApplicationCall.respondCapability(
+private suspend fun ApplicationCall.capabilityRoute(
     capability: String,
-    requestId: String,
-    block: suspend (String) -> AiCapabilityResponse,
+    block: suspend (String) -> Unit,
 ) {
+    val requestId = GatewaySecurity.requestId(this)
     val started = System.nanoTime()
     try {
         response.headers.append("X-Request-Id", requestId)
-        respond(block(requestId))
+        block(requestId)
         GatewayObservability.success(requestId, capability, null, started)
     } catch (e: IllegalArgumentException) {
         GatewayObservability.failure(requestId, capability, "invalid_request", started)
@@ -128,20 +126,4 @@ private suspend fun io.ktor.server.application.ApplicationCall.respondCapability
     }
 }
 
-private suspend fun capabilityRoute(
-    call: io.ktor.server.application.ApplicationCall,
-    security: GatewaySecurity,
-    capability: String,
-    block: suspend (String) -> AiCapabilityResponse,
-) {
-    val requestId = GatewaySecurity.requestId(call)
-    call.respondCapability(capability, requestId, block)
-}
-
 private const val MAX_PROMPT_LENGTH = 12000
-
-private fun AiProposalService.modelName(): String =
-    javaClass.getDeclaredField("aiTextGenerator").let { field ->
-        field.isAccessible = true
-        (field.get(this) as AiTextGenerator).modelName
-    }
