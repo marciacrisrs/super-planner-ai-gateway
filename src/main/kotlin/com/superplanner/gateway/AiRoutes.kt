@@ -98,31 +98,31 @@ fun Route.aiRoutes(
 
     post("/v1/ai/natural-language") {
         if (!security.requireAccess(call)) return@post
-        capabilityRoute(call, "natural-language") { id -> capabilityService.naturalLanguage(call.receive(), id) }
+        capabilityRoute(call, "natural-language") { id -> capabilityService.naturalLanguage(call.receive<NaturalLanguageRequest>(), id) }
     }
     post("/v1/ai/explain") {
         if (!security.requireAccess(call)) return@post
-        capabilityRoute(call, "explain") { id -> capabilityService.explanation(call.receive(), id) }
+        capabilityRoute(call, "explain") { id -> capabilityService.explanation(call.receive<ExplanationRequest>(), id) }
     }
     post("/v1/ai/command") {
         if (!security.requireAccess(call)) return@post
-        capabilityRoute(call, "command") { id -> capabilityService.command(call.receive(), id) }
+        capabilityRoute(call, "command") { id -> capabilityService.command(call.receive<CommandRequest>(), id) }
     }
     post("/v1/ai/insights") {
         if (!security.requireAccess(call)) return@post
-        capabilityRoute(call, "insights") { id -> capabilityService.insight(call.receive(), id) }
+        capabilityRoute(call, "insights") { id -> capabilityService.insight(call.receive<InsightRequest>(), id) }
     }
     post("/v1/ai/preferences") {
         if (!security.requireAccess(call)) return@post
-        capabilityRoute(call, "preferences") { id -> capabilityService.preference(call.receive(), id) }
+        capabilityRoute(call, "preferences") { id -> capabilityService.preference(call.receive<PreferenceRequest>(), id) }
     }
     post("/v1/ai/scenario") {
         if (!security.requireAccess(call)) return@post
-        capabilityRoute(call, "scenario") { id -> capabilityService.scenario(call.receive(), id) }
+        capabilityRoute(call, "scenario") { id -> capabilityService.scenario(call.receive<ScenarioRequest>(), id) }
     }
     post("/v1/ai/next-action") {
         if (!security.requireAccess(call)) return@post
-        capabilityRoute(call, "next-action") { id -> capabilityService.nextAction(call.receive(), id) }
+        capabilityRoute(call, "next-action") { id -> capabilityService.nextAction(call.receive<NextActionRequest>(), id) }
     }
 }
 
