@@ -40,10 +40,13 @@ class AiCapabilityService(
         return generate(requestId, """
             You are the explanation layer of Super Planner.
             Explain the answer using ONLY the supplied evidence. Never invent facts.
-            If evidence is insufficient, say so. Return ONLY JSON:
+            If evidence is insufficient, explicitly say there is not enough information and use LOW confidence.
+            evidenceUsed must contain only exact entries from the supplied evidence.
+            If supplied evidence conflicts, explicitly acknowledge the conflict rather than choosing an unsupported fact.
+            Return ONLY JSON:
             {"explanation": string, "evidenceUsed": [string], "confidence": "HIGH|MEDIUM|LOW"}
             Question: ${json.encodeToString(ExplanationRequest.serializer(), request)}
-        """.trimIndent(), ::validateExplanation)
+        """.trimIndent(), { result -> validateExplanation(result, request.evidence) })
     }
 
     fun command(request: CommandRequest, requestId: String): AiCapabilityResponse {
@@ -132,11 +135,7 @@ class AiCapabilityService(
         values.forEach { value -> require(value.length <= MAX_INPUT_LENGTH) { "$name contains an oversized item" } }
     }
 
-    private fun generate(
-        requestId: String,
-        prompt: String,
-        validator: (JsonObject) -> Unit,
-    ): AiCapabilityResponse {
+    private fun generate(requestId: String, prompt: String, validator: (JsonObject) -> Unit): AiCapabilityResponse {
         val raw = generator.generate(prompt)
         val result = try {
             json.decodeFromString<JsonObject>(cleanJson(raw))
@@ -160,15 +159,19 @@ class AiCapabilityService(
         requireStringArray(result, "inferredFields")
         requireStringArray(result, "missingFields")
         val command = (result["commandType"] as JsonPrimitive).content
-        if (command == "CREATE_ACTIVITY_DRAFT") {
-            require(result["requiresConfirmation"]?.toString() == "true") { "natural-language mutations require confirmation" }
-        }
+        if (command == "CREATE_ACTIVITY_DRAFT") require(result["requiresConfirmation"]?.toString() == "true") { "natural-language mutations require confirmation" }
     }
 
-    private fun validateExplanation(result: JsonObject) {
+    private fun validateExplanation(result: JsonObject, suppliedEvidence: List<String>) {
         requireString(result, "explanation")
         requireStringArray(result, "evidenceUsed")
         requireEnum(result, "confidence", CONFIDENCE)
+        val evidenceUsed = (result["evidenceUsed"] as JsonArray).map { (it as JsonPrimitive).content }
+        require(evidenceUsed.all { it in suppliedEvidence }) { "explanation references evidence not supplied by the domain" }
+        if (suppliedEvidence.isEmpty()) {
+            require(evidenceUsed.isEmpty()) { "explanation cannot cite evidence when none was supplied" }
+            require((result["confidence"] as JsonPrimitive).content == "LOW") { "insufficient evidence requires LOW confidence" }
+        }
     }
 
     private fun validateCommand(result: JsonObject) {
@@ -221,9 +224,7 @@ class AiCapabilityService(
         requireEnum(result, "confidence", CONFIDENCE)
         val alternatives = result["alternatives"] as? JsonArray ?: throw IllegalArgumentException("next-action response must contain alternatives")
         require(alternatives.size <= 2) { "next-action response has too many alternatives" }
-        require(alternatives.all { it is JsonPrimitive && it.isString && it.content in candidates }) {
-            "next-action alternatives contain a non-eligible candidate"
-        }
+        require(alternatives.all { it is JsonPrimitive && it.isString && it.content in candidates }) { "next-action alternatives contain a non-eligible candidate" }
         require(alternatives.distinct().size == alternatives.size) { "next-action alternatives must be unique" }
     }
 
@@ -237,9 +238,7 @@ class AiCapabilityService(
         require(value != null && !value.isString && value.content in setOf("true", "false")) { "$key must be a boolean" }
     }
 
-    private fun requireObject(result: JsonObject, key: String) {
-        require(result[key] is JsonObject) { "$key must be an object" }
-    }
+    private fun requireObject(result: JsonObject, key: String) { require(result[key] is JsonObject) { "$key must be an object" } }
 
     private fun requireStringArray(result: JsonObject, key: String) {
         val value = result[key]
