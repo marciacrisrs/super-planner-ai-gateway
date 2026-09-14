@@ -150,6 +150,9 @@ private suspend fun ApplicationCall.capabilityRoute(
         val result = withAiTimeout(AI_TIMEOUT_MS) { block(requestId) }
         respond(result)
         GatewayObservability.success(requestId, capability, result.model, started)
+    } catch (e: InvalidAiCapabilityException) {
+        GatewayObservability.failure(requestId, capability, "invalid_ai_response", started)
+        respond(HttpStatusCode.BadGateway, GatewayError("invalid_ai_response", "AI returned an invalid response", requestId))
     } catch (e: IllegalArgumentException) {
         GatewayObservability.failure(requestId, capability, "invalid_request", started)
         respond(HttpStatusCode.BadRequest, GatewayError("invalid_request", e.message ?: "invalid request", requestId))
@@ -157,8 +160,8 @@ private suspend fun ApplicationCall.capabilityRoute(
         GatewayObservability.failure(requestId, capability, "timeout", started)
         respond(HttpStatusCode.GatewayTimeout, GatewayError("timeout", "AI operation timed out", requestId))
     } catch (e: Exception) {
-        GatewayObservability.failure(requestId, capability, "ai_error", started)
-        respond(HttpStatusCode.BadGateway, GatewayError("ai_error", "AI operation failed", requestId))
+        GatewayObservability.failure(requestId, capability, "ai_provider_error", started)
+        respond(HttpStatusCode.BadGateway, GatewayError("ai_provider_error", "AI provider unavailable", requestId))
     }
 }
 
