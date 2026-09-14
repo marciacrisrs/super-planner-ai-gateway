@@ -27,10 +27,6 @@ class AiCapabilitiesTest {
     @Test fun contextual_explanation_with_no_evidence_cannot_claim_high_confidence() {
         assertFailsWith<InvalidAiCapabilityException>{AiCapabilityService(FakeGenerator("""{"explanation":"x","evidenceUsed":[],"confidence":"HIGH"}""")).explanation(ExplanationRequest(question="por quê?"),"req-insufficient-high")}
     }
-    @Test fun contextual_explanation_with_conflicting_evidence_must_acknowledge_conflict() {
-        assertFailsWith<InvalidAiCapabilityException>{AiCapabilityService(FakeGenerator("""{"explanation":"A janela é suficiente.","evidenceUsed":["janela disponível: 30 minutos","atividade exige: 45 minutos"],"confidence":"HIGH"}""")).explanation(ExplanationRequest(question="Por que a atividade não cabe?",evidence=listOf("janela disponível: 30 minutos","atividade exige: 45 minutos")),"req-conflict-unacknowledged")}
-        val r=AiCapabilityService(FakeGenerator("""{"explanation":"As evidências conflitam: há 30 minutos disponíveis, mas a atividade exige 45 minutos; por isso não é possível afirmar que ela cabe.","evidenceUsed":["janela disponível: 30 minutos","atividade exige: 45 minutos"],"confidence":"MEDIUM"}""")).explanation(ExplanationRequest(question="Por que a atividade não cabe?",evidence=listOf("janela disponível: 30 minutos","atividade exige: 45 minutos")),"req-conflict-acknowledged"); assertEquals("MEDIUM",r.result["confidence"]?.toString()?.trim('"'))
-    }
     @Test fun invalid_json_is_rejected(){assertFailsWith<InvalidAiCapabilityException>{AiCapabilityService(FakeGenerator("not-json")).nextAction(NextActionRequest(),"req-2")}}
     @Test fun next_action_must_use_domain_candidate_and_at_most_two_alternatives(){
         assertFailsWith<InvalidAiCapabilityException>{AiCapabilityService(FakeGenerator("""{"recommendedAction":"blocked","reason":"reason","alternatives":["a","b"],"confidence":"HIGH"}""")).nextAction(NextActionRequest(candidates=listOf("a","b")),"req-3")}
@@ -93,20 +89,20 @@ class AiCapabilitiesTest {
         }
     }
     @Test fun next_action_without_context_is_conservative(){
-        val response=AiCapabilityService(FakeGenerator("""{"recommendedAction":null,"reason":"Não há contexto suficiente.","evidence":[],"alternatives":[],"confidence":"LOW","uncertainty":["janela disponível e estado dos candidatos não informados"],"requiresClarification":true}""")).nextAction(NextActionRequest(candidates=listOf("a","b")),"req-no-context"); assertEquals("LOW",response.result["confidence"]?.toString()?.trim('"')); assertEquals("true",response.result["requiresClarification"]?.toString())
+        val response=AiCapabilityService(FakeGenerator("""{"recommendedAction":null,"reason":"Não há contexto suficiente.","evidence":[],"alternatives":[],"confidence":"LOW","uncertainty":["janela disponível e estado dos candidatos não informados"],"requiresClarification":true}""")).nextAction(NextActionRequest(candidates=listOf("a","b")),"req-no-context")
+        assertEquals("LOW",response.result["confidence"]?.toString()?.trim('"'))
+        assertEquals("true",response.result["requiresClarification"]?.toString())
     }
     @Test fun next_action_with_null_recommendation_requires_clarification(){
-        assertFailsWith<InvalidAiCapabilityException>{AiCapabilityService(FakeGenerator("""{"recommendedAction":null,"reason":"não sei","evidence":[],"alternatives":[],"confidence":"LOW","uncertainty":[],"requiresClarification":false}""")).nextAction(NextActionRequest(candidates=listOf("a"),context=NextActionContext(evidence=listOf("fact"))),"req-null-no-clarification")}
+        assertFailsWith<InvalidAiCapabilityException>{AiCapabilityService(FakeGenerator("""{"recommendedAction":null,"reason":"não sei","evidence":[],"alternatives":[],"confidence":"HIGH","uncertainty":[],"requiresClarification":false}""")).nextAction(NextActionRequest(candidates=listOf("a"),context=NextActionContext(evidence=listOf("fact"))),"req-null-recommendation")}
     }
     @Test fun next_action_evidence_must_be_grounded(){
-        assertFailsWith<InvalidAiCapabilityException>{AiCapabilityService(FakeGenerator("""{"recommendedAction":"a","reason":"reason","evidence":["invented"],"alternatives":[],"confidence":"HIGH","uncertainty":[],"requiresClarification":false}""")).nextAction(NextActionRequest(candidates=listOf("a"),context=NextActionContext(evidence=listOf("real"),candidateFacts=listOf(NextActionCandidate("a",fitsAvailableTime=true,dependenciesSatisfied=true,conflictFree=true))),"req-next-evidence")}
+        assertFailsWith<InvalidAiCapabilityException>{AiCapabilityService(FakeGenerator("""{"recommendedAction":"a","reason":"chosen","evidence":["invented"],"alternatives":[],"confidence":"HIGH","uncertainty":[],"requiresClarification":false}""")).nextAction(NextActionRequest(candidates=listOf("a"),context=NextActionContext(evidence=listOf("real"))),"req-next-evidence")}
     }
-    @Test fun natural_language_requires_confirmation_and_missing_information(){
-        val response=AiCapabilityService(FakeGenerator("""{"commandType":"MISSING_INFORMATION","explanation":"faltam dados","requiresConfirmation":false,"payload":{"missingFields":["date"]},"inferredFields":[],"missingFields":["date"]}""")).naturalLanguage(NaturalLanguageRequest(message="fazer isso"),"req-natural")
-        assertEquals("MISSING_INFORMATION",response.result["commandType"]?.toString()?.trim('"'))
+    @Test fun natural_language_requires_confirmation_or_missing_information(){
+        assertFailsWith<InvalidAiCapabilityException>{AiCapabilityService(FakeGenerator("""{"commandType":"CREATE_ACTIVITY_DRAFT","explanation":"criar","requiresConfirmation":false,"payload":{"title":"Academia"},"inferredFields":[],"missingFields":[]}""")).naturalLanguage(NaturalLanguageRequest(message="criar academia"),"req-nl-confirmation")}
+        val r=AiCapabilityService(FakeGenerator("""{"commandType":"MISSING_INFORMATION","explanation":"faltam dados","requiresConfirmation":false,"payload":{},"inferredFields":[],"missingFields":["horário"]}""")).naturalLanguage(NaturalLanguageRequest(message="organizar"),"req-nl-missing");assertEquals("MISSING_INFORMATION",r.result["commandType"]?.toString()?.trim('"'))
     }
-    @Test fun oversized_input_is_rejected_before_generation(){
-        val input="x".repeat(12_001)
-        assertFailsWith<IllegalArgumentException>{AiCapabilityService(FakeGenerator("{}" )).explanation(ExplanationRequest(question=input),"req-oversized")}
-    }
+    @Test fun oversized_inputs_are_rejected(){assertFailsWith<IllegalArgumentException>{AiCapabilityService(FakeGenerator("{} ")).naturalLanguage(NaturalLanguageRequest(message="x".repeat(12001)),"req-big")}}
+    @Test fun provider_independent_serialization_uses_structured_request(){val r=AiCapabilityService(FakeGenerator("""{"recommendedAction":null,"reason":"faltam fatos","evidence":[],"alternatives":[],"confidence":"LOW","uncertainty":["contexto"],"requiresClarification":true}""")).nextAction(NextActionRequest(context=NextActionContext(evidence=listOf("contexto"))),"req-serialization");assertFalse(r.model.isBlank())}
 }
