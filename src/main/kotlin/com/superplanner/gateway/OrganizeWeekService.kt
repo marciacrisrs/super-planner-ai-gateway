@@ -34,9 +34,15 @@ class OrganizeWeekService(
         request.desires.validatePlanItems("desires")
         require(request.aiTips.size <= MAX_LIST_ITEMS) { "aiTips has too many items" }
         request.aiTips.forEach { require(it.length <= MAX_STRING_LENGTH) { "aiTips contains an oversized item" } }
+
+        val knownItemIds = (request.existingPlan + request.fixedCommitments + request.desires)
+            .map { it.id }
+            .toSet()
         request.logistics.forEach {
             require(it.minutes >= 0) { "logistics minutes must be non-negative" }
             require(it.type.isNotBlank()) { "logistics type must not be blank" }
+            it.beforeItemId?.let { id -> require(id in knownItemIds) { "unknown logistics beforeItemId" } }
+            it.afterItemId?.let { id -> require(id in knownItemIds) { "unknown logistics afterItemId" } }
         }
         request.capacity?.let { capacity ->
             require(capacity.totalCapacityMinutes >= 0)
