@@ -7,6 +7,8 @@ class AiProposalService(
     private val aiTextGenerator: AiTextGenerator,
     private val json: Json = Json { ignoreUnknownKeys = false },
 ) {
+    val modelName: String get() = aiTextGenerator.modelName
+
     fun propose(request: AiProposalRequest, requestId: String = UUID.randomUUID().toString()): AiProposalEnvelope {
         require(request.schemaVersion == CURRENT_SCHEMA_VERSION) { "unsupported schemaVersion" }
         require(request.message.isNotBlank()) { "message must not be blank" }
