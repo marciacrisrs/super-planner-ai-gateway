@@ -160,6 +160,10 @@ class AiCapabilityService(
         requireObject(result, "payload")
         requireStringArray(result, "inferredFields")
         requireStringArray(result, "missingFields")
+        val command = (result["commandType"] as JsonPrimitive).content
+        if (command == "CREATE_ACTIVITY_DRAFT") {
+            require(result["requiresConfirmation"]?.toString() == "true") { "natural-language mutations require confirmation" }
+        }
     }
 
     private fun validateExplanation(result: JsonObject) {
