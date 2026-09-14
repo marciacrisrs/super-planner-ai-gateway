@@ -2,6 +2,8 @@ package com.superplanner.gateway
 
 import java.util.UUID
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonPrimitive
 
 class AiProposalService(
     private val aiTextGenerator: AiTextGenerator,
@@ -58,13 +60,54 @@ class AiProposalService(
     private fun validateProposal(proposal: AiProposal) {
         require(proposal.commandType in SUPPORTED_COMMANDS) { "unsupported commandType" }
         require(proposal.explanation.isNotBlank()) { "explanation must not be blank" }
+        require(proposal.payload.isNotEmpty() || proposal.commandType == "RECALCULATE_ROUTE") { "payload must not be empty" }
+
+        val mutating = proposal.commandType in MUTATING_COMMANDS
+        require(!mutating || proposal.requiresConfirmation) { "mutating proposals require confirmation" }
+
         when (proposal.commandType) {
-            "CREATE_ACTIVITY_DRAFT" -> require(proposal.payload.containsKey("title")) { "CREATE_ACTIVITY_DRAFT requires title" }
-            "EXPLAIN_NEXT_ACTIVITY" -> require(proposal.payload.containsKey("evidence")) { "EXPLAIN_NEXT_ACTIVITY requires evidence" }
-            "REORGANIZE_DAY" -> require(proposal.payload.containsKey("delayMinutes")) { "REORGANIZE_DAY requires delayMinutes" }
-            "MISSING_INFORMATION" -> require(proposal.payload.containsKey("fields")) { "MISSING_INFORMATION requires fields" }
-            "RECALCULATE_ROUTE" -> Unit
+            "CREATE_ACTIVITY_DRAFT" -> {
+                requireString(proposal, "title")
+                requireOptionalString(proposal, "date")
+                requireOptionalString(proposal, "startTime")
+                requireOptionalNumber(proposal, "durationMinutes")
+                requireOptionalString(proposal, "recurrence")
+            }
+            "EXPLAIN_NEXT_ACTIVITY" -> {
+                requireString(proposal, "activityId")
+                requireStringArray(proposal, "evidence")
+            }
+            "REORGANIZE_DAY" -> requireNumber(proposal, "delayMinutes")
+            "MISSING_INFORMATION" -> requireStringArray(proposal, "fields")
+            "RECALCULATE_ROUTE" -> require(proposal.payload.isEmpty()) { "RECALCULATE_ROUTE payload must be empty" }
         }
+    }
+
+    private fun requireString(proposal: AiProposal, key: String) {
+        val value = proposal.payload[key] as? JsonPrimitive
+        require(value != null && value.isString && value.content.isNotBlank()) { "$key must be a non-blank string" }
+    }
+
+    private fun requireOptionalString(proposal: AiProposal, key: String) {
+        val value = proposal.payload[key] ?: return
+        if (value is JsonPrimitive && value.content == "null" && !value.isString) return
+        require(value is JsonPrimitive && value.isString) { "$key must be a string or null" }
+    }
+
+    private fun requireOptionalNumber(proposal: AiProposal, key: String) {
+        val value = proposal.payload[key] ?: return
+        if (value is JsonPrimitive && value.content == "null" && !value.isString) return
+        require(value is JsonPrimitive && !value.isString && value.content.toDoubleOrNull() != null) { "$key must be a number or null" }
+    }
+
+    private fun requireNumber(proposal: AiProposal, key: String) {
+        val value = proposal.payload[key] as? JsonPrimitive
+        require(value != null && !value.isString && value.content.toDoubleOrNull() != null) { "$key must be a number" }
+    }
+
+    private fun requireStringArray(proposal: AiProposal, key: String) {
+        val value = proposal.payload[key]
+        require(value is JsonArray && value.all { it is JsonPrimitive && it.isString }) { "$key must be an array of strings" }
     }
 
     private fun cleanJson(raw: String): String = raw.trim()
@@ -80,6 +123,11 @@ class AiProposalService(
             "EXPLAIN_NEXT_ACTIVITY",
             "REORGANIZE_DAY",
             "MISSING_INFORMATION",
+            "RECALCULATE_ROUTE",
+        )
+        private val MUTATING_COMMANDS = setOf(
+            "CREATE_ACTIVITY_DRAFT",
+            "REORGANIZE_DAY",
             "RECALCULATE_ROUTE",
         )
     }
