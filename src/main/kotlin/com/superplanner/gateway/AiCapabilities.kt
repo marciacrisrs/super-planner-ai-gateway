@@ -30,23 +30,27 @@ class AiCapabilityService(
 ) {
     fun naturalLanguage(request: NaturalLanguageRequest, requestId: String): AiCapabilityResponse {
         validate(request.schemaVersion, request.message)
-        return generate(requestId, naturalLanguagePrompt(request))
+        val response = generate(requestId, naturalLanguagePrompt(request))
+        validateNaturalLanguage(response.result)
+        return response
     }
 
     fun explanation(request: ExplanationRequest, requestId: String): AiCapabilityResponse {
         validate(request.schemaVersion, request.question)
-        return generate(requestId, """
+        val response = generate(requestId, """
             You are the explanation layer of Super Planner.
             Explain the answer using ONLY the supplied evidence. Never invent facts.
             If evidence is insufficient, say so. Return ONLY JSON:
             {"explanation": string, "evidenceUsed": [string], "confidence": "HIGH|MEDIUM|LOW"}
             Question: ${json.encodeToString(ExplanationRequest.serializer(), request)}
         """.trimIndent())
+        validateExplanation(response.result)
+        return response
     }
 
     fun command(request: CommandRequest, requestId: String): AiCapabilityResponse {
         validate(request.schemaVersion, request.message)
-        return generate(requestId, """
+        val response = generate(requestId, """
             You are the command interpretation layer of Super Planner.
             Convert the user's request into exactly one safe, known PlanningCommand.
             Never execute it, calculate a route, access a database, or invent facts.
@@ -56,38 +60,48 @@ class AiCapabilityService(
             Unknown or ambiguous requests must use MISSING_INFORMATION.
             Request: ${json.encodeToString(CommandRequest.serializer(), request)}
         """.trimIndent())
+        validateCommand(response.result)
+        return response
     }
 
     fun insight(request: InsightRequest, requestId: String): AiCapabilityResponse {
         require(request.schemaVersion == "1") { "unsupported schemaVersion" }
         require(request.sampleSize >= 0) { "sampleSize must not be negative" }
-        return generate(requestId, """
+        val response = generate(requestId, """
             You are the planning insights layer of Super Planner.
             Interpret only supplied evidence. Do not invent statistics or treat small samples as facts.
             Never modify planning rules or commitments. Return ONLY JSON:
             {"insights":[{"title":string,"description":string,"evidence":[string],"confidence":"HIGH|MEDIUM|LOW"}],"recommendations":[string]}
             Request: ${json.encodeToString(InsightRequest.serializer(), request)}
         """.trimIndent())
+        validateInsights(response.result)
+        return response
     }
 
-    fun preference(request: PreferenceRequest, requestId: String): AiCapabilityResponse =
-        generate(requestId, """
+    fun preference(request: PreferenceRequest, requestId: String): AiCapabilityResponse {
+        require(request.schemaVersion == "1") { "unsupported schemaVersion" }
+        val response = generate(requestId, """
             Infer stable planning preferences only when the observations provide sufficient evidence.
             One isolated observation is not enough. Do not persist anything.
             Return ONLY JSON:
             {"preferences":[{"preference":string,"evidence":[string],"confidence":"HIGH|MEDIUM|LOW"}]}
             Observations: ${json.encodeToString(PreferenceRequest.serializer(), request)}
         """.trimIndent())
+        validatePreferences(response.result)
+        return response
+    }
 
     fun scenario(request: ScenarioRequest, requestId: String): AiCapabilityResponse {
         validate(request.schemaVersion, request.question)
-        return generate(requestId, """
+        val response = generate(requestId, """
             Interpret the user's hypothetical planning scenario. Do not modify the real plan.
             Return ONLY JSON:
             {"scenario":string,"changes":[],"assumptions":[],"requiresClarification":boolean}
             The app will run the scenario through its PlanningEngine.
             Request: ${json.encodeToString(ScenarioRequest.serializer(), request)}
         """.trimIndent())
+        validateScenario(response.result)
+        return response
     }
 
     fun nextAction(request: NextActionRequest, requestId: String): AiCapabilityResponse {
@@ -103,18 +117,7 @@ class AiCapabilityService(
             Alternatives must also come only from the candidate list and must contain at most two items.
             Request: ${json.encodeToString(NextActionRequest.serializer(), request)}
         """.trimIndent())
-
-        val recommended = response.result["recommendedAction"]
-            ?.let { (it as? JsonPrimitive)?.content }
-            ?.takeIf { it.isNotBlank() && it != "null" }
-        require(recommended == null || recommended in request.candidates) { "AI recommended a non-eligible candidate" }
-
-        val alternatives = response.result["alternatives"] as? JsonArray
-            ?: throw IllegalArgumentException("next-action response must contain alternatives")
-        require(alternatives.size <= 2) { "next-action response has too many alternatives" }
-        require(alternatives.all { it is JsonPrimitive && it.content in request.candidates }) {
-            "next-action alternatives contain a non-eligible candidate"
-        }
+        validateNextAction(response.result, request.candidates)
         return response
     }
 
@@ -130,6 +133,108 @@ class AiCapabilityService(
         return AiCapabilityResponse(requestId = requestId, result = result, model = generator.modelName)
     }
 
+    private fun validateNaturalLanguage(result: JsonObject) {
+        requireEnum(result, "commandType", setOf("CREATE_ACTIVITY_DRAFT", "MISSING_INFORMATION"))
+        requireString(result, "explanation")
+        requireBoolean(result, "requiresConfirmation")
+        requireObject(result, "payload")
+        requireStringArray(result, "inferredFields")
+        requireStringArray(result, "missingFields")
+    }
+
+    private fun validateExplanation(result: JsonObject) {
+        requireString(result, "explanation")
+        requireStringArray(result, "evidenceUsed")
+        requireEnum(result, "confidence", CONFIDENCE)
+    }
+
+    private fun validateCommand(result: JsonObject) {
+        requireEnum(result, "commandType", COMMANDS)
+        requireBoolean(result, "requiresConfirmation")
+        requireObject(result, "payload")
+        requireString(result, "explanation")
+        val command = (result["commandType"] as JsonPrimitive).content
+        if (command != "MISSING_INFORMATION") require(result["requiresConfirmation"]?.toString() == "true") { "command proposals require confirmation" }
+    }
+
+    private fun validateInsights(result: JsonObject) {
+        val insights = result["insights"] as? JsonArray ?: throw IllegalArgumentException("insights must be an array")
+        insights.forEach { item ->
+            val obj = item as? JsonObject ?: throw IllegalArgumentException("each insight must be an object")
+            requireString(obj, "title")
+            requireString(obj, "description")
+            requireStringArray(obj, "evidence")
+            requireEnum(obj, "confidence", CONFIDENCE)
+        }
+        requireStringArray(result, "recommendations")
+    }
+
+    private fun validatePreferences(result: JsonObject) {
+        val preferences = result["preferences"] as? JsonArray ?: throw IllegalArgumentException("preferences must be an array")
+        preferences.forEach { item ->
+            val obj = item as? JsonObject ?: throw IllegalArgumentException("each preference must be an object")
+            requireString(obj, "preference")
+            requireStringArray(obj, "evidence")
+            requireEnum(obj, "confidence", CONFIDENCE)
+        }
+    }
+
+    private fun validateScenario(result: JsonObject) {
+        requireString(result, "scenario")
+        requireStringArray(result, "changes")
+        requireStringArray(result, "assumptions")
+        requireBoolean(result, "requiresClarification")
+    }
+
+    private fun validateNextAction(result: JsonObject, candidates: List<String>) {
+        val recommended = result["recommendedAction"]?.let { value ->
+            when (value) {
+                is JsonPrimitive -> if (value.content == "null" && !value.isString) null else value.content
+                else -> throw IllegalArgumentException("recommendedAction must be a string or null")
+            }
+        }
+        require(recommended == null || recommended in candidates) { "AI recommended a non-eligible candidate" }
+        requireString(result, "reason")
+        requireEnum(result, "confidence", CONFIDENCE)
+        val alternatives = result["alternatives"] as? JsonArray ?: throw IllegalArgumentException("next-action response must contain alternatives")
+        require(alternatives.size <= 2) { "next-action response has too many alternatives" }
+        require(alternatives.all { it is JsonPrimitive && it.isString && it.content in candidates }) {
+            "next-action alternatives contain a non-eligible candidate"
+        }
+        require(alternatives.distinct().size == alternatives.size) { "next-action alternatives must be unique" }
+    }
+
+    private fun requireString(result: JsonObject, key: String) {
+        val value = result[key] as? JsonPrimitive
+        require(value != null && value.isString && value.content.isNotBlank()) { "$key must be a non-blank string" }
+    }
+
+    private fun requireBoolean(result: JsonObject, key: String) {
+        val value = result[key] as? JsonPrimitive
+        require(value != null && !value.isString && value.content in setOf("true", "false")) { "$key must be a boolean" }
+    }
+
+    private fun requireObject(result: JsonObject, key: String) {
+        require(result[key] is JsonObject) { "$key must be an object" }
+    }
+
+    private fun requireStringArray(result: JsonObject, key: String) {
+        val value = result[key]
+        require(value is JsonArray && value.all { it is JsonPrimitive && it.isString }) { "$key must be an array of strings" }
+    }
+
+    private fun requireEnum(result: JsonObject, key: String, allowed: Set<String>) {
+        val value = result[key] as? JsonPrimitive
+        require(value != null && value.isString && value.content in allowed) { "$key contains an unsupported value" }
+    }
+
+    private fun cleanJson(raw: String): String = raw.trim().removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
+
+    companion object {
+        private val CONFIDENCE = setOf("HIGH", "MEDIUM", "LOW")
+        private val COMMANDS = setOf("MARK_DELAYED", "CANCEL_ACTIVITY", "CREATE_ACTIVITY_DRAFT", "CHANGE_ACTIVITY", "REORGANIZE_DAY", "MISSING_INFORMATION")
+    }
+
     private fun naturalLanguagePrompt(request: NaturalLanguageRequest): String = """
         You are the natural-language interpretation layer for Super Planner.
         Convert the message into one provider-independent AiProposal.
@@ -140,6 +245,4 @@ class AiCapabilityService(
          "requiresConfirmation":true,"payload":{},"inferredFields":[string],"missingFields":[string]}
         Request: ${json.encodeToString(NaturalLanguageRequest.serializer(), request)}
     """.trimIndent()
-
-    private fun cleanJson(raw: String): String = raw.trim().removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
 }
