@@ -7,6 +7,7 @@ import io.ktor.server.response.respond
 class GatewaySecurity(
     private val expectedApiKey: String = System.getenv("GATEWAY_API_KEY")?.trim().orEmpty(),
     private val environment: String = System.getenv("ENVIRONMENT")?.trim()?.lowercase() ?: "production",
+    private val rateLimiter: RateLimiter = RateLimiter(),
 ) {
     suspend fun requireAccess(call: ApplicationCall): Boolean {
         if (environment == "test") return true
@@ -17,6 +18,10 @@ class GatewaySecurity(
         val supplied = call.request.headers["X-Gateway-Api-Key"]?.trim()
         if (supplied.isNullOrBlank() || !constantTimeEquals(supplied, expectedApiKey)) {
             call.respond(HttpStatusCode.Unauthorized, GatewayError("unauthorized", "Invalid gateway credentials", requestId(call)))
+            return false
+        }
+        if (!rateLimiter.allow(supplied)) {
+            call.respond(HttpStatusCode.TooManyRequests, GatewayError("rate_limited", "Too many requests", requestId(call)))
             return false
         }
         return true
