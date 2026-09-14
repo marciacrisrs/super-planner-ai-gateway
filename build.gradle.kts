@@ -3,7 +3,7 @@ plugins {
     kotlin("plugin.serialization") version "2.2.20"
     id("io.ktor.plugin") version "3.2.3"
     id("org.jlleitschuh.gradle.ktlint") version "14.2.0"
-    id("io.gitlab.arturbosch.detekt") version "2.0.0-alpha.6"
+    id("dev.detekt") version "2.0.0-alpha.6"
     id("org.sonarqube") version "7.4.0.8496"
     jacoco
     application
