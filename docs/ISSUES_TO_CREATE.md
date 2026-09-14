@@ -1,0 +1,1 @@
+The repository currently has GW #1. The requested GW #2–#11 backlog is defined in docs/issue-contracts.md. GitHub issue creation requires the issue-writing connector action; until that action is available, no issue numbers are being fabricated.
