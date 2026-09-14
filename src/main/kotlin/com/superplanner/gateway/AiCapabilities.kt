@@ -30,6 +30,7 @@ class AiCapabilityService(
 ) {
     fun naturalLanguage(request: NaturalLanguageRequest, requestId: String): AiCapabilityResponse {
         validate(request.schemaVersion, request.message)
+        validateContext(request.context)
         val response = generate(requestId, naturalLanguagePrompt(request))
         validateNaturalLanguage(response.result)
         return response
@@ -37,6 +38,7 @@ class AiCapabilityService(
 
     fun explanation(request: ExplanationRequest, requestId: String): AiCapabilityResponse {
         validate(request.schemaVersion, request.question)
+        validateStringList(request.evidence, "evidence")
         val response = generate(requestId, """
             You are the explanation layer of Super Planner.
             Explain the answer using ONLY the supplied evidence. Never invent facts.
@@ -50,6 +52,7 @@ class AiCapabilityService(
 
     fun command(request: CommandRequest, requestId: String): AiCapabilityResponse {
         validate(request.schemaVersion, request.message)
+        validateContext(request.context)
         val response = generate(requestId, """
             You are the command interpretation layer of Super Planner.
             Convert the user's request into exactly one safe, known PlanningCommand.
@@ -67,6 +70,7 @@ class AiCapabilityService(
     fun insight(request: InsightRequest, requestId: String): AiCapabilityResponse {
         require(request.schemaVersion == "1") { "unsupported schemaVersion" }
         require(request.sampleSize >= 0) { "sampleSize must not be negative" }
+        validateStringList(request.evidence, "evidence")
         val response = generate(requestId, """
             You are the planning insights layer of Super Planner.
             Interpret only supplied evidence. Do not invent statistics or treat small samples as facts.
@@ -80,6 +84,7 @@ class AiCapabilityService(
 
     fun preference(request: PreferenceRequest, requestId: String): AiCapabilityResponse {
         require(request.schemaVersion == "1") { "unsupported schemaVersion" }
+        validateStringList(request.observations, "observations")
         val response = generate(requestId, """
             Infer stable planning preferences only when the observations provide sufficient evidence.
             One isolated observation is not enough. Do not persist anything.
@@ -93,6 +98,7 @@ class AiCapabilityService(
 
     fun scenario(request: ScenarioRequest, requestId: String): AiCapabilityResponse {
         validate(request.schemaVersion, request.question)
+        validateContext(request.context)
         val response = generate(requestId, """
             Interpret the user's hypothetical planning scenario. Do not modify the real plan.
             Return ONLY JSON:
@@ -106,7 +112,9 @@ class AiCapabilityService(
 
     fun nextAction(request: NextActionRequest, requestId: String): AiCapabilityResponse {
         require(request.schemaVersion == "1") { "unsupported schemaVersion" }
+        validateContext(request.context)
         require(request.candidates.distinct().size == request.candidates.size) { "candidates must be unique" }
+        validateStringList(request.candidates, "candidates")
         val response = generate(requestId, """
             Recommend a next action from the supplied planning context.
             The candidate list is a domain-owned feasibility boundary. You MUST return a recommendedAction that is exactly one of the supplied candidates, or null when no candidate is feasible.
@@ -124,6 +132,18 @@ class AiCapabilityService(
     private fun validate(schemaVersion: String, message: String) {
         require(schemaVersion == "1") { "unsupported schemaVersion" }
         require(message.isNotBlank()) { "message must not be blank" }
+        require(message.length <= MAX_INPUT_LENGTH) { "input exceeds maximum length" }
+    }
+
+    private fun validateContext(context: AiProposalContext) {
+        context.nowIso?.let { require(it.length <= MAX_INPUT_LENGTH) { "nowIso exceeds maximum length" } }
+        context.activeActivityId?.let { require(it.length <= MAX_INPUT_LENGTH) { "activeActivityId exceeds maximum length" } }
+        validateStringList(context.minimalRouteFacts, "minimalRouteFacts")
+    }
+
+    private fun validateStringList(values: List<String>, name: String) {
+        require(values.size <= MAX_LIST_ITEMS) { "$name has too many items" }
+        values.forEach { value -> require(value.length <= MAX_INPUT_LENGTH) { "$name contains an oversized item" } }
     }
 
     private fun generate(requestId: String, prompt: String): AiCapabilityResponse {
@@ -220,7 +240,7 @@ class AiCapabilityService(
 
     private fun requireStringArray(result: JsonObject, key: String) {
         val value = result[key]
-        require(value is JsonArray && value.all { it is JsonPrimitive && it.isString }) { "$key must be an array of strings" }
+        require(value is JsonArray && value.size <= MAX_LIST_ITEMS && value.all { it is JsonPrimitive && it.isString && it.content.length <= MAX_INPUT_LENGTH }) { "$key must be an array of strings" }
     }
 
     private fun requireEnum(result: JsonObject, key: String, allowed: Set<String>) {
@@ -231,6 +251,8 @@ class AiCapabilityService(
     private fun cleanJson(raw: String): String = raw.trim().removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
 
     companion object {
+        private const val MAX_INPUT_LENGTH = 12000
+        private const val MAX_LIST_ITEMS = 100
         private val CONFIDENCE = setOf("HIGH", "MEDIUM", "LOW")
         private val COMMANDS = setOf("MARK_DELAYED", "CANCEL_ACTIVITY", "CREATE_ACTIVITY_DRAFT", "CHANGE_ACTIVITY", "REORGANIZE_DAY", "MISSING_INFORMATION")
     }
