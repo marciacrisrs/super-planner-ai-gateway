@@ -48,13 +48,14 @@ class AiProposalService(
 
     private fun buildPrompt(request: AiProposalRequest): String = """
         You are the interpretation layer for Super Planner.
-        Convert the user's natural-language request into ONE provider-independent proposal.
-        The proposal is not execution. Never write to a database, calculate an authoritative route,
-        change commitments, or invent facts that are not supported by the request/context.
+        Convert the user's natural-language request into ONE provider-independent planning command.
+        The command is not execution. Never write to a database, call Room, call PlanningEngine,
+        calculate authoritative viability or routes, change commitments, or invent facts that are
+        not supported by the request/context.
         If required information is missing or the request is ambiguous, use MISSING_INFORMATION.
         Return ONLY valid JSON matching this exact shape:
         {
-          "commandType": "CREATE_ACTIVITY_DRAFT|EXPLAIN_NEXT_ACTIVITY|REORGANIZE_DAY|MISSING_INFORMATION|RECALCULATE_ROUTE",
+          "commandType": "CREATE_ACTIVITY_DRAFT|CANCEL_ACTIVITY|CHANGE_ACTIVITY|REORGANIZE_DAY|EXPLAIN_NEXT_ACTIVITY|MISSING_INFORMATION|RECALCULATE_ROUTE",
           "explanation": "short explanation grounded in the request/context",
           "requiresConfirmation": true,
           "payload": {}
@@ -62,11 +63,16 @@ class AiProposalService(
 
         Rules:
         - CREATE_ACTIVITY_DRAFT payload: {"title": string, "date": string|null, "startTime": string|null, "durationMinutes": number|null, "recurrence": string|null}
-        - EXPLAIN_NEXT_ACTIVITY payload: {"activityId": string, "evidence": [string]}
+        - CANCEL_ACTIVITY payload: {"activityId": string}
+        - CHANGE_ACTIVITY payload: {"activityId": string, "changes": {"title": string|null, "date": string|null, "startTime": string|null, "durationMinutes": number|null}}
         - REORGANIZE_DAY payload: {"delayMinutes": number}
+        - EXPLAIN_NEXT_ACTIVITY payload: {"activityId": string, "evidence": [string]}
         - MISSING_INFORMATION payload: {"fields": [string]}
         - RECALCULATE_ROUTE payload: {}
-        - requiresConfirmation must be true for every proposal that can change user data.
+        - Mutating commands must require confirmation.
+        - Changes must identify an existing activity when changing or cancelling an activity.
+        - Do not infer an activity identifier from a name or invent one.
+        - Ambiguous requests must not be converted into a mutating command.
         - Never output Markdown or code fences.
 
         Request:
@@ -89,6 +95,13 @@ class AiProposalService(
                 requireOptionalNumber(proposal, "durationMinutes")
                 requireOptionalString(proposal, "recurrence")
             }
+            "CANCEL_ACTIVITY" -> requireString(proposal, "activityId")
+            "CHANGE_ACTIVITY" -> {
+                requireString(proposal, "activityId")
+                val changes = proposal.payload["changes"]
+                require(changes is kotlinx.serialization.json.JsonObject && changes.isNotEmpty()) { "changes must be a non-empty object" }
+                validateChangeFields(changes)
+            }
             "EXPLAIN_NEXT_ACTIVITY" -> {
                 requireString(proposal, "activityId")
                 requireStringArray(proposal, "evidence")
@@ -99,19 +112,37 @@ class AiProposalService(
         }
     }
 
+    private fun validateChangeFields(changes: kotlinx.serialization.json.JsonObject) {
+        val allowed = setOf("title", "date", "startTime", "durationMinutes")
+        require(changes.keys.all(allowed::contains)) { "changes contains an unsupported field" }
+        require(changes.values.any { it !is JsonNull }) { "changes must contain at least one concrete value" }
+        requireOptionalString(changes, "title")
+        requireOptionalString(changes, "date")
+        requireOptionalString(changes, "startTime")
+        requireOptionalNumber(changes, "durationMinutes")
+    }
+
     private fun requireString(proposal: AiProposal, key: String) {
-        val value = proposal.payload[key] as? JsonPrimitive
+        requireString(proposal.payload, key)
+    }
+
+    private fun requireString(objectValue: kotlinx.serialization.json.JsonObject, key: String) {
+        val value = objectValue[key] as? JsonPrimitive
         require(value != null && value.isString && value.content.isNotBlank()) { "$key must be a non-blank string" }
     }
 
-    private fun requireOptionalString(proposal: AiProposal, key: String) {
-        val value = proposal.payload[key] ?: return
+    private fun requireOptionalString(proposal: AiProposal, key: String) = requireOptionalString(proposal.payload, key)
+
+    private fun requireOptionalString(objectValue: kotlinx.serialization.json.JsonObject, key: String) {
+        val value = objectValue[key] ?: return
         if (value === JsonNull) return
         require(value is JsonPrimitive && value.isString) { "$key must be a string or null" }
     }
 
-    private fun requireOptionalNumber(proposal: AiProposal, key: String) {
-        val value = proposal.payload[key] ?: return
+    private fun requireOptionalNumber(proposal: AiProposal, key: String) = requireOptionalNumber(proposal.payload, key)
+
+    private fun requireOptionalNumber(objectValue: kotlinx.serialization.json.JsonObject, key: String) {
+        val value = objectValue[key] ?: return
         if (value === JsonNull) return
         require(value is JsonPrimitive && !value.isString && value.content.toDoubleOrNull() != null) { "$key must be a number or null" }
     }
@@ -140,13 +171,17 @@ class AiProposalService(
         private const val MAX_CONTEXT_TOTAL_LENGTH = 12_000
         private val SUPPORTED_COMMANDS = setOf(
             "CREATE_ACTIVITY_DRAFT",
-            "EXPLAIN_NEXT_ACTIVITY",
+            "CANCEL_ACTIVITY",
+            "CHANGE_ACTIVITY",
             "REORGANIZE_DAY",
+            "EXPLAIN_NEXT_ACTIVITY",
             "MISSING_INFORMATION",
             "RECALCULATE_ROUTE",
         )
         private val MUTATING_COMMANDS = setOf(
             "CREATE_ACTIVITY_DRAFT",
+            "CANCEL_ACTIVITY",
+            "CHANGE_ACTIVITY",
             "REORGANIZE_DAY",
             "RECALCULATE_ROUTE",
         )
