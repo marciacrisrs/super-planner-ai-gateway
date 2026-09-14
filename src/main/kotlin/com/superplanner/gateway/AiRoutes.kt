@@ -8,7 +8,6 @@ import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.post
 import kotlinx.serialization.Serializable
-import java.util.UUID
 
 @Serializable
 data class GenerateAiRequest(val prompt: String)
@@ -68,11 +67,20 @@ fun Route.aiRoutes(
 
     post("/v1/ai/organize-week") {
         if (!security.requireAccess(call)) return@post
-        capabilityRoute(call, "organize-week") {
-            organizeWeekService.organize(call.receive()).let { response ->
-                call.respond(response)
-                GatewayObservability.success(GatewaySecurity.requestId(call), "organize-week", response.model, 0L)
-            }
+        val requestId = GatewaySecurity.requestId(call)
+        val started = System.nanoTime()
+        try {
+            val request = call.receive<OrganizeWeekRequest>()
+            val response = organizeWeekService.organize(request)
+            call.response.headers.append("X-Request-Id", requestId)
+            call.respond(response)
+            GatewayObservability.success(requestId, "organize-week", response.model, started)
+        } catch (e: IllegalArgumentException) {
+            GatewayObservability.failure(requestId, "organize-week", "invalid_request", started)
+            call.respond(HttpStatusCode.BadRequest, GatewayError("invalid_request", e.message ?: "invalid request", requestId))
+        } catch (e: Exception) {
+            GatewayObservability.failure(requestId, "organize-week", "ai_error", started)
+            call.respond(HttpStatusCode.BadGateway, GatewayError("ai_error", "AI operation failed", requestId))
         }
     }
 
