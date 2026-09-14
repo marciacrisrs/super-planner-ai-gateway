@@ -17,11 +17,11 @@ data class GatewayDependencies(
     val security: GatewaySecurity,
 )
 
-fun Application.module(dependencies: GatewayDependencies = GatewayDependencies.production()) {
-    val geminiService = dependencies.aiTextGenerator
-    val organizeWeekService = OrganizeWeekService(geminiService)
-    val aiProposalService = AiProposalService(geminiService)
-    val capabilityService = AiCapabilityService(geminiService)
+fun Application.module(dependencies: GatewayDependencies = productionGatewayDependencies()) {
+    val aiTextGenerator = dependencies.aiTextGenerator
+    val organizeWeekService = OrganizeWeekService(aiTextGenerator)
+    val aiProposalService = AiProposalService(aiTextGenerator)
+    val capabilityService = AiCapabilityService(aiTextGenerator)
     val configurationReady = gatewayConfigurationReady()
 
     install(CallLogging)
@@ -49,9 +49,12 @@ fun Application.module(dependencies: GatewayDependencies = GatewayDependencies.p
                 call.respond(HttpStatusCode.ServiceUnavailable, HealthResponse(status = "not_ready"))
             }
         }
-        aiRoutes(geminiService, organizeWeekService, aiProposalService, capabilityService, dependencies.security)
+        aiRoutes(aiTextGenerator, organizeWeekService, aiProposalService, capabilityService, dependencies.security)
     }
 }
+
+private fun productionGatewayDependencies(): GatewayDependencies =
+    GatewayDependencies(GeminiService(), GatewaySecurity())
 
 private fun gatewayConfigurationReady(): Boolean {
     val environment = System.getenv("ENVIRONMENT")?.trim()?.lowercase() ?: "production"
@@ -62,11 +65,6 @@ private fun gatewayConfigurationReady(): Boolean {
     return project.isNotBlank() && location.isNotBlank() && model.isNotBlank() &&
         (environment == "test" || apiKey.isNotBlank())
 }
-
-private fun GatewayDependencies.Companion.production(): GatewayDependencies =
-    GatewayDependencies(GeminiService(), GatewaySecurity())
-
-private companion object GatewayDependencies.Companion
 
 @Serializable
 data class HealthResponse(val status: String)
