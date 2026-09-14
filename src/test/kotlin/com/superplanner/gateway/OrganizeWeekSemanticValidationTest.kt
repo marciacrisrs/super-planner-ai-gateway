@@ -66,6 +66,38 @@ class OrganizeWeekSemanticValidationTest {
     }
 
     @Test
+    fun `proposal cannot start before domain minimum start time`() {
+        val existing = PlanItem("appointment", "Consulta", "2026-09-14", "10:00", "11:00")
+        val response = responseWith(
+            ProposedPlanItem("appointment", "Consulta", "2026-09-14", "09:30", "10:30", "existing")
+        )
+        assertFailsWith<IllegalStateException> {
+            OrganizeWeekService(FakeAi(response)).organize(
+                OrganizeWeekRequest(
+                    "2026-09-14",
+                    "America/Sao_Paulo",
+                    existingPlan = listOf(existing)
+                )
+            )
+        }
+    }
+
+    @Test
+    fun `proposal at domain minimum start time is accepted`() {
+        val existing = PlanItem("appointment", "Consulta", "2026-09-14", "10:00", "11:00")
+        val result = OrganizeWeekService(
+            FakeAi(responseWith(ProposedPlanItem("appointment", "Consulta", "2026-09-14", "10:00", "10:30", "existing")))
+        ).organize(
+            OrganizeWeekRequest(
+                "2026-09-14",
+                "America/Sao_Paulo",
+                existingPlan = listOf(existing)
+            )
+        )
+        assertEquals("appointment", result.proposedItems.single().id)
+    }
+
+    @Test
     fun `valid fixed commitment and proposal are accepted`() {
         val fixed = PlanItem("work", "Trabalho", "2026-09-14", "09:00", "18:00", required = true)
         val result = OrganizeWeekService(
