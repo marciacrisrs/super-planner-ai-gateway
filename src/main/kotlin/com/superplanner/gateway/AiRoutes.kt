@@ -83,6 +83,9 @@ fun Route.aiRoutes(
             call.response.headers.append("X-Request-Id", requestId)
             call.respond(response)
             GatewayObservability.success(requestId, "organize-week", response.model, started)
+        } catch (e: InvalidOrganizeWeekException) {
+            GatewayObservability.failure(requestId, "organize-week", "invalid_ai_response", started)
+            call.respond(HttpStatusCode.BadGateway, GatewayError("invalid_ai_response", "AI returned an invalid organize-week response", requestId))
         } catch (e: IllegalArgumentException) {
             GatewayObservability.failure(requestId, "organize-week", "invalid_request", started)
             call.respond(HttpStatusCode.BadRequest, GatewayError("invalid_request", e.message ?: "invalid request", requestId))
