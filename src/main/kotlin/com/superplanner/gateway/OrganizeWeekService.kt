@@ -38,10 +38,14 @@ class OrganizeWeekService(
         4. Required commute and preparation time are real occupied time and cannot overlap optional activities.
         5. Calculate preparation/commute backwards when a fixed start time requires it.
         6. Detect conflicts instead of hiding them or forcing an impossible schedule.
-        7. Desires should be fitted realistically according to priority and available capacity.
-        8. AI tips are suggestions, never mandatory commitments.
-        9. Preserve the original plan; the response is a proposal for review, not an automatic mutation.
-        10. Every proposed item must identify its source: existing, fixed, desire, logistics, or ai_suggestion.
+        7. Desires should be scheduled only when the supplied capacity supports them.
+        8. If capacity is TIGHT, prefer fewer activities and preserve meaningful recovery margin.
+        9. If capacity is OVER_CAPACITY, do not pretend all desires fit; expose explicit trade-offs/conflicts.
+        10. Treat sleep, recovery, work, commitments, logistics and preparation represented by the capacity facts as protected time.
+        11. Use historical capacity facts as evidence, not as a reason to blame or score the person.
+        12. AI tips are suggestions, never mandatory commitments.
+        13. Preserve the original plan; the response is a proposal for review, not an automatic mutation.
+        14. Every proposed item must identify its source: existing, fixed, desire, logistics, or ai_suggestion.
 
         Output this exact JSON shape:
         {
