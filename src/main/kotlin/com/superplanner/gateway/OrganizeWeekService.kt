@@ -5,22 +5,21 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
 
 class OrganizeWeekService(
-    private val geminiService: GeminiService,
+    private val aiTextGenerator: AiTextGenerator,
     private val json: Json = Json { ignoreUnknownKeys = true }
 ) {
     fun organize(request: OrganizeWeekRequest): OrganizeWeekResponse {
         require(request.weekStart.isNotBlank()) { "weekStart must not be blank" }
         require(request.timezone.isNotBlank()) { "timezone must not be blank" }
 
-        val prompt = buildPrompt(request)
-        val raw = geminiService.generate(prompt)
+        val raw = aiTextGenerator.generate(buildPrompt(request))
         val jsonObject = parseJsonObject(raw)
 
         return try {
             json.decodeFromJsonElement(OrganizeWeekResponse.serializer(), jsonObject)
-                .copy(model = geminiService.modelName)
+                .copy(model = aiTextGenerator.modelName)
         } catch (exception: Exception) {
-            throw IllegalStateException("Gemini returned an invalid organize-week proposal", exception)
+            throw IllegalStateException("AI returned an invalid organize-week proposal", exception)
         }
     }
 
@@ -105,7 +104,7 @@ class OrganizeWeekService(
         return try {
             json.parseToJsonElement(cleaned).jsonObject
         } catch (exception: Exception) {
-            throw IllegalStateException("Gemini returned non-JSON organize-week output", exception)
+            throw IllegalStateException("AI returned non-JSON organize-week output", exception)
         }
     }
 }
