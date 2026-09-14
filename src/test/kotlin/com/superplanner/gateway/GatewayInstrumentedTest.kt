@@ -14,7 +14,6 @@ import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
-import kotlin.test.assertTrue
 
 class GatewayInstrumentedTest {
     private val json = Json { ignoreUnknownKeys = false }
@@ -79,7 +78,7 @@ class GatewayInstrumentedTest {
         val response = client.post("/v1/ai/generate") {
             header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
             header("X-Request-Id", "instrumented-generate-2")
-            setBody("{\"prompt\":\"   \\" + "}" )
+            setBody("""{"prompt":"   "}""")
         }
 
         assertEquals(HttpStatusCode.BadRequest, response.status)
