@@ -33,6 +33,25 @@ class AiCapabilitiesTest {
     }
 
     @Test
+    fun next_action_must_use_domain_candidate_and_at_most_two_alternatives() {
+        val service = AiCapabilityService(
+            FakeGenerator(
+                """{"recommendedAction":"blocked","reason":"reason","alternatives":["a","b"],"confidence":"HIGH"}""",
+            ),
+        )
+        assertFailsWith<IllegalArgumentException> {
+            service.nextAction(NextActionRequest(candidates = listOf("a", "b")), "req-3")
+        }
+
+        val valid = AiCapabilityService(
+            FakeGenerator(
+                """{"recommendedAction":"a","reason":"Cabe na janela disponível.","alternatives":["b"],"confidence":"HIGH"}""",
+            ),
+        ).nextAction(NextActionRequest(candidates = listOf("a", "b", "c")), "req-4")
+        assertEquals("a", valid.result["recommendedAction"]?.toString()?.trim('"'))
+    }
+
+    @Test
     fun request_contract_serializes_without_provider_types() {
         val json = Json { encodeDefaults = true }
         val encoded = json.encodeToString(
