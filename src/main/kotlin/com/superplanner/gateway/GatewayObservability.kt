@@ -16,6 +16,23 @@ object GatewayObservability {
         )
     }
 
+    fun providerSuccess(model: String, startedNanos: Long) {
+        logger.info(
+            "event=ai_provider status=success model={} latencyMs={}",
+            model,
+            elapsedMs(startedNanos),
+        )
+    }
+
+    fun providerFailure(model: String, error: String, startedNanos: Long) {
+        logger.warn(
+            "event=ai_provider status=failure model={} error={} latencyMs={}",
+            model,
+            error,
+            elapsedMs(startedNanos),
+        )
+    }
+
     fun failure(requestId: String, capability: String, error: String, startedNanos: Long? = null) {
         if (startedNanos == null) {
             logger.warn(
