@@ -20,8 +20,16 @@ class GeminiService(
 
     override fun generate(prompt: String): String {
         require(prompt.isNotBlank()) { "prompt must not be blank" }
-        return client.models.generateContent(modelName, prompt, null).text()
-            ?: throw IllegalStateException("Gemini returned an empty response")
+        val started = System.nanoTime()
+        return try {
+            val text = client.models.generateContent(modelName, prompt, null).text()
+                ?: throw IllegalStateException("Gemini returned an empty response")
+            GatewayObservability.providerSuccess(modelName, started)
+            text
+        } catch (e: Exception) {
+            GatewayObservability.providerFailure(modelName, e::class.simpleName ?: "provider_error", started)
+            throw e
+        }
     }
 
     companion object {
