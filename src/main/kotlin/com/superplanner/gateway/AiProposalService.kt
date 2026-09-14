@@ -13,8 +13,7 @@ class AiProposalService(
     val modelName: String get() = aiTextGenerator.modelName
 
     fun propose(request: AiProposalRequest, requestId: String = UUID.randomUUID().toString()): AiProposalEnvelope {
-        require(request.schemaVersion == CURRENT_SCHEMA_VERSION) { "unsupported schemaVersion" }
-        require(request.message.isNotBlank()) { "message must not be blank" }
+        validateRequest(request)
 
         val raw = aiTextGenerator.generate(buildPrompt(request))
         val proposal = try {
@@ -29,6 +28,22 @@ class AiProposalService(
             proposal = proposal,
             model = aiTextGenerator.modelName,
         )
+    }
+
+    private fun validateRequest(request: AiProposalRequest) {
+        require(request.schemaVersion == CURRENT_SCHEMA_VERSION) { "unsupported schemaVersion" }
+        require(request.message.isNotBlank()) { "message must not be blank" }
+        require(request.message.length <= MAX_INPUT_LENGTH) { "input exceeds maximum length" }
+        request.context.nowIso?.let { require(it.length <= MAX_CONTEXT_FIELD_LENGTH) { "nowIso exceeds maximum length" } }
+        request.context.activeActivityId?.let { require(it.length <= MAX_CONTEXT_FIELD_LENGTH) { "activeActivityId exceeds maximum length" } }
+        require(request.context.minimalRouteFacts.size <= MAX_CONTEXT_ITEMS) { "minimalRouteFacts has too many items" }
+        request.context.minimalRouteFacts.forEach {
+            require(it.length <= MAX_CONTEXT_FIELD_LENGTH) { "minimalRouteFacts contains an oversized item" }
+        }
+        val contextChars = request.context.nowIso.orEmpty().length +
+            request.context.activeActivityId.orEmpty().length +
+            request.context.minimalRouteFacts.sumOf(String::length)
+        require(contextChars <= MAX_CONTEXT_TOTAL_LENGTH) { "context exceeds maximum size" }
     }
 
     private fun buildPrompt(request: AiProposalRequest): String = """
@@ -108,7 +123,7 @@ class AiProposalService(
 
     private fun requireStringArray(proposal: AiProposal, key: String) {
         val value = proposal.payload[key]
-        require(value is JsonArray && value.all { it is JsonPrimitive && it.isString }) { "$key must be an array of strings" }
+        require(value is JsonArray && value.size <= MAX_CONTEXT_ITEMS && value.all { it is JsonPrimitive && it.isString && it.content.length <= MAX_CONTEXT_FIELD_LENGTH }) { "$key must be an array of strings" }
     }
 
     private fun cleanJson(raw: String): String = raw.trim()
@@ -119,6 +134,10 @@ class AiProposalService(
 
     companion object {
         const val CURRENT_SCHEMA_VERSION = "1"
+        private const val MAX_INPUT_LENGTH = 12_000
+        private const val MAX_CONTEXT_ITEMS = 100
+        private const val MAX_CONTEXT_FIELD_LENGTH = 4_000
+        private const val MAX_CONTEXT_TOTAL_LENGTH = 12_000
         private val SUPPORTED_COMMANDS = setOf(
             "CREATE_ACTIVITY_DRAFT",
             "EXPLAIN_NEXT_ACTIVITY",
