@@ -26,7 +26,8 @@ class ContextualExplanationTest {
         )
 
         assertEquals("HIGH", response.result["confidence"]?.toString()?.trim('"'))
-        assertEquals("[\"$window\",\"$duration\"]", response.result["evidenceUsed"]?.toString())
+        val expectedEvidence = "[\"$window\",\"$duration\"]"
+        assertEquals(expectedEvidence, response.result["evidenceUsed"]?.toString())
     }
 
     @Test
