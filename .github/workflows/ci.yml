@@ -34,6 +34,14 @@ jobs:
           GOOGLE_CLOUD_PROJECT: test-project
           GOOGLE_CLOUD_LOCATION: us-central1
           GEMINI_MODEL: test-model
+      - name: Analyze and publish coverage to SonarCloud
+        run: gradle sonar --no-daemon
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          ENVIRONMENT: test
+          GOOGLE_CLOUD_PROJECT: test-project
+          GOOGLE_CLOUD_LOCATION: us-central1
+          GEMINI_MODEL: test-model
 
   container:
     runs-on: ubuntu-latest
@@ -44,9 +52,9 @@ jobs:
         with:
           persist-credentials: false
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+        uses: docker/setup-buildx-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v3.12.0
       - name: Build container
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        uses: docker/build-push-action@53b7df96c91f9c12dccacbed38856d5c2c0a7bcb9ccacbed38856a # v7.3.0
         with:
           context: .
           push: false
