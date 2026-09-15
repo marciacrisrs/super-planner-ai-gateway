@@ -23,6 +23,7 @@ fun Route.aiRoutes(
     capabilityService: AiCapabilityService,
     security: GatewaySecurity,
 ) {
+    val adaptiveCapabilityService = AdaptiveAiCapabilityService(aiTextGenerator)
     post("/v1/ai/generate") {
         if (!security.requireAccess(call)) return@post
         val requestId = GatewaySecurity.requestId(call)
@@ -100,45 +101,35 @@ fun Route.aiRoutes(
 
     post("/v1/ai/natural-language") {
         if (!security.requireAccess(call)) return@post
-        call.capabilityRoute("natural-language") { id ->
-            capabilityService.naturalLanguage(call.receive<NaturalLanguageRequest>(), id)
-        }
+        call.capabilityRoute("natural-language") { id -> capabilityService.naturalLanguage(call.receive<NaturalLanguageRequest>(), id) }
     }
     post("/v1/ai/explain") {
         if (!security.requireAccess(call)) return@post
-        call.capabilityRoute("explain") { id ->
-            capabilityService.explanation(call.receive<ExplanationRequest>(), id)
-        }
+        call.capabilityRoute("explain") { id -> capabilityService.explanation(call.receive<ExplanationRequest>(), id) }
     }
     post("/v1/ai/command") {
         if (!security.requireAccess(call)) return@post
-        call.capabilityRoute("command") { id ->
-            capabilityService.command(call.receive<CommandRequest>(), id)
-        }
+        call.capabilityRoute("command") { id -> capabilityService.command(call.receive<CommandRequest>(), id) }
     }
     post("/v1/ai/insights") {
         if (!security.requireAccess(call)) return@post
-        call.capabilityRoute("insights") { id ->
-            capabilityService.insight(call.receive<InsightRequest>(), id)
-        }
+        call.capabilityRoute("insights") { id -> capabilityService.insight(call.receive<InsightRequest>(), id) }
     }
     post("/v1/ai/preferences") {
         if (!security.requireAccess(call)) return@post
-        call.capabilityRoute("preferences") { id ->
-            capabilityService.preference(call.receive<PreferenceRequest>(), id)
-        }
+        call.capabilityRoute("preferences") { id -> capabilityService.preference(call.receive<PreferenceRequest>(), id) }
+    }
+    post("/v1/ai/replan") {
+        if (!security.requireAccess(call)) return@post
+        call.capabilityRoute("replan") { id -> adaptiveCapabilityService.replan(call.receive<ReplanRequest>(), id) }
     }
     post("/v1/ai/scenario") {
         if (!security.requireAccess(call)) return@post
-        call.capabilityRoute("scenario") { id ->
-            capabilityService.scenario(call.receive<ScenarioRequest>(), id)
-        }
+        call.capabilityRoute("scenario") { id -> adaptiveCapabilityService.scenario(call.receive<ScenarioRequest>(), id) }
     }
     post("/v1/ai/next-action") {
         if (!security.requireAccess(call)) return@post
-        call.capabilityRoute("next-action") { id ->
-            capabilityService.nextAction(call.receive<NextActionRequest>(), id)
-        }
+        call.capabilityRoute("next-action") { id -> adaptiveCapabilityService.nextAction(call.receive<NextActionRequest>(), id) }
     }
 }
 
