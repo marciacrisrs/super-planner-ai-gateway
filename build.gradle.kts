@@ -18,6 +18,8 @@ application {
 }
 
 dependencies {
+    implementation(platform("io.netty:netty-bom:4.2.17.Final"))
+    implementation(platform("com.fasterxml.jackson:jackson-bom:2.18.8"))
     implementation("io.ktor:ktor-server-core-jvm")
     implementation("io.ktor:ktor-server-netty-jvm")
     implementation("io.ktor:ktor-server-content-negotiation-jvm")
@@ -26,7 +28,7 @@ dependencies {
     implementation("io.ktor:ktor-server-status-pages-jvm")
     implementation("io.ktor:ktor-server-auth-jvm")
     implementation("com.google.genai:google-genai:1.71.0")
-    implementation("ch.qos.logback:logback-classic:1.5.18")
+    implementation("ch.qos.logback:logback-classic:1.5.34")
     testImplementation("io.ktor:ktor-server-test-host-jvm")
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")
 }
