@@ -47,6 +47,8 @@ naming:
 
 style:
   severity: warning
+  FunctionOnlyReturningConstant:
+    active: false
   MagicNumber:
     active: true
     ignoreNumbers: ['-1', '0', '1', '2', '3', '4', '5', '6', '8', '10', '12']
@@ -97,6 +99,12 @@ performance:
 exceptions:
   severity: error
   active: true
+  TooGenericExceptionCaught:
+    active: false
+  SwallowedException:
+    active: false
+  ThrowingExceptionsWithoutMessageOrCause:
+    active: false
 
 empty-blocks:
   severity: warning
