@@ -22,7 +22,7 @@ fun Route.aiRoutes(
 ) {
     post("/v1/ai/generate") {
         if (!security.requireAccess(call)) return@post
-        call.executeAiRoute("generate") {
+        call.executeAiRoute("generate") { _ ->
             val request = call.receive<GenerateAiRequest>()
             require(request.prompt.isNotBlank()) { "prompt must not be blank" }
             require(request.prompt.length <= MAX_PROMPT_LENGTH) { "prompt exceeds maximum length" }
@@ -42,10 +42,9 @@ fun Route.aiRoutes(
             providerError = { requestId ->
                 AiProposalError("ai_provider_error", AI_OPERATION_FAILED_MESSAGE, requestId)
             },
-        ) {
+        ) { requestId ->
             val request = call.receive<AiProposalRequest>()
             require(request.message.length <= MAX_PROMPT_LENGTH) { "message exceeds maximum length" }
-            val requestId = GatewaySecurity.requestId(call)
             val response = aiProposalService.propose(request, requestId)
             AiRouteResult(response, response.model)
         }
@@ -59,7 +58,7 @@ fun Route.aiRoutes(
             invalidError = { requestId ->
                 GatewayError("invalid_ai_response", "AI returned an invalid organize-week response", requestId)
             },
-        ) {
+        ) { _ ->
             val response = organizeWeekService.organize(call.receive<OrganizeWeekRequest>())
             AiRouteResult(response, response.model)
         }
@@ -67,44 +66,44 @@ fun Route.aiRoutes(
 
     post("/v1/ai/natural-language") {
         if (!security.requireAccess(call)) return@post
-        call.capabilityRoute(security, "natural-language") {
-            capabilityService.naturalLanguage(call.receive<NaturalLanguageRequest>(), it)
+        call.capabilityRoute(security, "natural-language") { requestId ->
+            capabilityService.naturalLanguage(call.receive<NaturalLanguageRequest>(), requestId)
         }
     }
     post("/v1/ai/explain") {
         if (!security.requireAccess(call)) return@post
-        call.capabilityRoute(security, "explain") {
-            capabilityService.explanation(call.receive<ExplanationRequest>(), it)
+        call.capabilityRoute(security, "explain") { requestId ->
+            capabilityService.explanation(call.receive<ExplanationRequest>(), requestId)
         }
     }
     post("/v1/ai/command") {
         if (!security.requireAccess(call)) return@post
-        call.capabilityRoute(security, "command") {
-            capabilityService.command(call.receive<CommandRequest>(), it)
+        call.capabilityRoute(security, "command") { requestId ->
+            capabilityService.command(call.receive<CommandRequest>(), requestId)
         }
     }
     post("/v1/ai/insights") {
         if (!security.requireAccess(call)) return@post
-        call.capabilityRoute(security, "insights") {
-            capabilityService.insight(call.receive<InsightRequest>(), it)
+        call.capabilityRoute(security, "insights") { requestId ->
+            capabilityService.insight(call.receive<InsightRequest>(), requestId)
         }
     }
     post("/v1/ai/preferences") {
         if (!security.requireAccess(call)) return@post
-        call.capabilityRoute(security, "preferences") {
-            capabilityService.preference(call.receive<PreferenceRequest>(), it)
+        call.capabilityRoute(security, "preferences") { requestId ->
+            capabilityService.preference(call.receive<PreferenceRequest>(), requestId)
         }
     }
     post("/v1/ai/scenario") {
         if (!security.requireAccess(call)) return@post
-        call.capabilityRoute(security, "scenario") {
-            capabilityService.scenario(call.receive<ScenarioRequest>(), it)
+        call.capabilityRoute(security, "scenario") { requestId ->
+            capabilityService.scenario(call.receive<ScenarioRequest>(), requestId)
         }
     }
     post("/v1/ai/next-action") {
         if (!security.requireAccess(call)) return@post
-        call.capabilityRoute(security, "next-action") {
-            capabilityService.nextAction(call.receive<NextActionRequest>(), it)
+        call.capabilityRoute(security, "next-action") { requestId ->
+            capabilityService.nextAction(call.receive<NextActionRequest>(), requestId)
         }
     }
 }
@@ -114,8 +113,8 @@ private suspend fun ApplicationCall.capabilityRoute(
     capability: String,
     block: suspend (String) -> AiCapabilityResponse,
 ) {
-    executeAiRoute(capability, InvalidAiCapabilityException::class.java) {
-        val requestId = GatewaySecurity.requestId(this)
+    if (!security.requireAccess(this)) return
+    executeAiRoute(capability, InvalidAiCapabilityException::class.java) { requestId ->
         val result = block(requestId)
         AiRouteResult(result, result.model)
     }
