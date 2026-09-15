@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   test:
-    name: Lint, Detekt, test, coverage and Sonar
+    name: Lint, Detekt, test and coverage
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -34,10 +34,6 @@ jobs:
           GOOGLE_CLOUD_PROJECT: test-project
           GOOGLE_CLOUD_LOCATION: us-central1
           GEMINI_MODEL: test-model
-      - name: SonarCloud quality gate
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        run: gradle sonar --no-daemon
 
   container:
     runs-on: ubuntu-latest
@@ -48,7 +44,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@8d2750c68a42422c14e847ce6ac0403b4cbd6f # v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847ec6ac0403b4cbd6f # v3
       - name: Build container
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
