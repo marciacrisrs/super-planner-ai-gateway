@@ -30,7 +30,7 @@ class GatewaySecurity(
             )
             return false
         }
-        if (!rateLimiter.allow(supplied!!)) {
+        if (!rateLimiter.allow(supplied.orEmpty())) {
             val requestId = requestId(call)
             call.response.headers.append("X-Request-Id", requestId)
             call.respond(
@@ -46,8 +46,12 @@ class GatewaySecurity(
         !supplied.isNullOrBlank() && constantTimeEquals(supplied, expectedApiKey)
 
     companion object {
+        private val SAFE_REQUEST_ID = Regex("^[A-Za-z0-9._:-]{1,64}$")
+
         fun requestId(call: ApplicationCall): String =
-            call.request.headers["X-Request-Id"]?.takeIf { it.isNotBlank() }
+            call.request.headers["X-Request-Id"]
+                ?.trim()
+                ?.takeIf { SAFE_REQUEST_ID.matches(it) }
                 ?: java.util.UUID.randomUUID().toString()
 
         private fun constantTimeEquals(a: String, b: String): Boolean {
