@@ -13,7 +13,7 @@ class GatewaySecurity(
         if (environment == "test") return true
         if (expectedApiKey.isBlank()) {
             val requestId = requestId(call)
-            call.response.headers.append("X-Request-Id", requestId)
+            call.response.headers.append(REQUEST_ID_HEADER, requestId)
             call.respond(
                 HttpStatusCode.ServiceUnavailable,
                 GatewayError("gateway_not_configured", "Gateway authentication is not configured", requestId),
@@ -23,7 +23,7 @@ class GatewaySecurity(
         val supplied = call.request.headers["X-Gateway-Api-Key"]?.trim()
         if (!credentialsMatch(supplied)) {
             val requestId = requestId(call)
-            call.response.headers.append("X-Request-Id", requestId)
+            call.response.headers.append(REQUEST_ID_HEADER, requestId)
             call.respond(
                 HttpStatusCode.Unauthorized,
                 GatewayError("unauthorized", "Invalid gateway credentials", requestId),
@@ -32,7 +32,7 @@ class GatewaySecurity(
         }
         if (!rateLimiter.allow(supplied!!)) {
             val requestId = requestId(call)
-            call.response.headers.append("X-Request-Id", requestId)
+            call.response.headers.append(REQUEST_ID_HEADER, requestId)
             call.respond(
                 HttpStatusCode.TooManyRequests,
                 GatewayError("rate_limited", "Too many requests", requestId),
@@ -46,8 +46,10 @@ class GatewaySecurity(
         !supplied.isNullOrBlank() && constantTimeEquals(supplied, expectedApiKey)
 
     companion object {
+        const val REQUEST_ID_HEADER = "X-Request-Id"
+
         fun requestId(call: ApplicationCall): String =
-            call.request.headers["X-Request-Id"]?.takeIf { it.isNotBlank() }
+            call.request.headers[REQUEST_ID_HEADER]?.takeIf { it.isNotBlank() }
                 ?: java.util.UUID.randomUUID().toString()
 
         private fun constantTimeEquals(a: String, b: String): Boolean {

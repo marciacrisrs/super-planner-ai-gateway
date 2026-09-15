@@ -1,13 +1,10 @@
 package com.superplanner.gateway
 
-import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.call
 import io.ktor.server.request.receive
-import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.post
-import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -23,150 +20,102 @@ fun Route.aiRoutes(
     capabilityService: AiCapabilityService,
     security: GatewaySecurity,
 ) {
-    post("/v1/ai/generate") {
-        if (!security.requireAccess(call)) return@post
-        val requestId = GatewaySecurity.requestId(call)
-        call.response.headers.append("X-Request-Id", requestId)
-        val started = System.nanoTime()
-        try {
-            val request = call.receive<GenerateAiRequest>()
-            require(request.prompt.isNotBlank()) { "prompt must not be blank" }
-            require(request.prompt.length <= MAX_PROMPT_LENGTH) { "prompt exceeds maximum length" }
-            val text = withAiTimeout(AI_TIMEOUT_MS) { aiTextGenerator.generate(request.prompt) }
-            call.respond(GenerateAiResponse(text, aiTextGenerator.modelName))
-            GatewayObservability.success(requestId, "generate", aiTextGenerator.modelName, started)
-        } catch (e: IllegalArgumentException) {
-            GatewayObservability.failure(requestId, "generate", "invalid_request", started)
-            call.respond(HttpStatusCode.BadRequest, GatewayError("invalid_request", e.message ?: "invalid request", requestId))
-        } catch (e: TimeoutCancellationException) {
-            GatewayObservability.failure(requestId, "generate", "timeout", started)
-            call.respond(HttpStatusCode.GatewayTimeout, GatewayError("timeout", "AI operation timed out", requestId))
-        } catch (e: Exception) {
-            GatewayObservability.failure(requestId, "generate", "ai_provider_error", started)
-            call.respond(HttpStatusCode.BadGateway, GatewayError("ai_provider_error", "AI provider unavailable", requestId))
-        }
+    aiPost("/v1/ai/generate", security, "generate") {
+        val request = call.receive<GenerateAiRequest>()
+        require(request.prompt.isNotBlank()) { "prompt must not be blank" }
+        require(request.prompt.length <= MAX_PROMPT_LENGTH) { "prompt exceeds maximum length" }
+        val text = aiTextGenerator.generate(request.prompt)
+        AiRouteResult(GenerateAiResponse(text, aiTextGenerator.modelName), aiTextGenerator.modelName)
     }
 
-    post("/v1/ai/propose") {
-        if (!security.requireAccess(call)) return@post
-        val requestId = GatewaySecurity.requestId(call)
-        call.response.headers.append("X-Request-Id", requestId)
-        val started = System.nanoTime()
-        try {
-            val request = call.receive<AiProposalRequest>()
-            require(request.message.length <= MAX_PROMPT_LENGTH) { "message exceeds maximum length" }
-            val response = withAiTimeout(AI_TIMEOUT_MS) { aiProposalService.propose(request, requestId) }
-            call.respond(response)
-            GatewayObservability.success(requestId, "propose", response.model, started)
-        } catch (e: InvalidAiProposalException) {
-            GatewayObservability.failure(requestId, "propose", "invalid_ai_proposal", started)
-            call.respond(HttpStatusCode.BadGateway, AiProposalError("invalid_ai_proposal", "AI proposal could not be validated", requestId))
-        } catch (e: IllegalArgumentException) {
-            GatewayObservability.failure(requestId, "propose", "invalid_request", started)
-            call.respond(HttpStatusCode.BadRequest, AiProposalError("invalid_request", e.message ?: "invalid request", requestId))
-        } catch (e: TimeoutCancellationException) {
-            GatewayObservability.failure(requestId, "propose", "timeout", started)
-            call.respond(HttpStatusCode.GatewayTimeout, AiProposalError("timeout", "AI operation timed out", requestId))
-        } catch (e: Exception) {
-            GatewayObservability.failure(requestId, "propose", "ai_provider_error", started)
-            call.respond(HttpStatusCode.BadGateway, AiProposalError("ai_provider_error", "AI operation failed", requestId))
-        }
+    aiPost(
+        path = "/v1/ai/propose",
+        security = security,
+        capability = "propose",
+        invalidException = InvalidAiProposalException::class.java,
+        invalidError = { requestId ->
+            AiProposalError("invalid_ai_proposal", "AI proposal could not be validated", requestId)
+        },
+        providerError = { requestId ->
+            AiProposalError("ai_provider_error", AI_OPERATION_FAILED_MESSAGE, requestId)
+        },
+    ) { requestId ->
+        val request = call.receive<AiProposalRequest>()
+        require(request.message.length <= MAX_PROMPT_LENGTH) { "message exceeds maximum length" }
+        val response = aiProposalService.propose(request, requestId)
+        AiRouteResult(response, response.model)
     }
 
-    post("/v1/ai/organize-week") {
-        if (!security.requireAccess(call)) return@post
-        val requestId = GatewaySecurity.requestId(call)
-        call.response.headers.append("X-Request-Id", requestId)
-        val started = System.nanoTime()
-        try {
-            val request = call.receive<OrganizeWeekRequest>()
-            val response = withAiTimeout(AI_TIMEOUT_MS) { organizeWeekService.organize(request) }
-            call.respond(response)
-            GatewayObservability.success(requestId, "organize-week", response.model, started)
-        } catch (e: InvalidOrganizeWeekException) {
-            GatewayObservability.failure(requestId, "organize-week", "invalid_ai_response", started)
-            call.respond(HttpStatusCode.BadGateway, GatewayError("invalid_ai_response", "AI returned an invalid organize-week response", requestId))
-        } catch (e: IllegalArgumentException) {
-            GatewayObservability.failure(requestId, "organize-week", "invalid_request", started)
-            call.respond(HttpStatusCode.BadRequest, GatewayError("invalid_request", e.message ?: "invalid request", requestId))
-        } catch (e: TimeoutCancellationException) {
-            GatewayObservability.failure(requestId, "organize-week", "timeout", started)
-            call.respond(HttpStatusCode.GatewayTimeout, GatewayError("timeout", "AI operation timed out", requestId))
-        } catch (e: Exception) {
-            GatewayObservability.failure(requestId, "organize-week", "ai_error", started)
-            call.respond(HttpStatusCode.BadGateway, GatewayError("ai_error", "AI operation failed", requestId))
-        }
+    aiPost(
+        path = "/v1/ai/organize-week",
+        security = security,
+        capability = ORGANIZE_WEEK_CAPABILITY,
+        invalidException = InvalidOrganizeWeekException::class.java,
+        invalidError = { requestId ->
+            GatewayError("invalid_ai_response", "AI returned an invalid organize-week response", requestId)
+        },
+    ) {
+        val response = organizeWeekService.organize(call.receive<OrganizeWeekRequest>())
+        AiRouteResult(response, response.model)
     }
 
-    post("/v1/ai/natural-language") {
-        if (!security.requireAccess(call)) return@post
-        call.capabilityRoute("natural-language") { id ->
-            capabilityService.naturalLanguage(call.receive<NaturalLanguageRequest>(), id)
-        }
+    capabilityPost("natural-language", security) { requestId ->
+        capabilityService.naturalLanguage(call.receive<NaturalLanguageRequest>(), requestId)
     }
-    post("/v1/ai/explain") {
-        if (!security.requireAccess(call)) return@post
-        call.capabilityRoute("explain") { id ->
-            capabilityService.explanation(call.receive<ExplanationRequest>(), id)
-        }
+    capabilityPost("explain", security) { requestId ->
+        capabilityService.explanation(call.receive<ExplanationRequest>(), requestId)
     }
-    post("/v1/ai/command") {
-        if (!security.requireAccess(call)) return@post
-        call.capabilityRoute("command") { id ->
-            capabilityService.command(call.receive<CommandRequest>(), id)
-        }
+    capabilityPost("command", security) { requestId ->
+        capabilityService.command(call.receive<CommandRequest>(), requestId)
     }
-    post("/v1/ai/insights") {
-        if (!security.requireAccess(call)) return@post
-        call.capabilityRoute("insights") { id ->
-            capabilityService.insight(call.receive<InsightRequest>(), id)
-        }
+    capabilityPost("insights", security) { requestId ->
+        capabilityService.insight(call.receive<InsightRequest>(), requestId)
     }
-    post("/v1/ai/preferences") {
-        if (!security.requireAccess(call)) return@post
-        call.capabilityRoute("preferences") { id ->
-            capabilityService.preference(call.receive<PreferenceRequest>(), id)
-        }
+    capabilityPost("preferences", security) { requestId ->
+        capabilityService.preference(call.receive<PreferenceRequest>(), requestId)
     }
-    post("/v1/ai/scenario") {
-        if (!security.requireAccess(call)) return@post
-        call.capabilityRoute("scenario") { id ->
-            capabilityService.scenario(call.receive<ScenarioRequest>(), id)
-        }
+    capabilityPost("scenario", security) { requestId ->
+        capabilityService.scenario(call.receive<ScenarioRequest>(), requestId)
     }
-    post("/v1/ai/next-action") {
-        if (!security.requireAccess(call)) return@post
-        call.capabilityRoute("next-action") { id ->
-            capabilityService.nextAction(call.receive<NextActionRequest>(), id)
-        }
+    capabilityPost("next-action", security) { requestId ->
+        capabilityService.nextAction(call.receive<NextActionRequest>(), requestId)
     }
 }
 
-private suspend fun ApplicationCall.capabilityRoute(
+private fun Route.capabilityPost(
     capability: String,
-    block: suspend (String) -> AiCapabilityResponse,
-) {
-    val requestId = GatewaySecurity.requestId(this)
-    response.headers.append("X-Request-Id", requestId)
-    val started = System.nanoTime()
-    try {
-        val result = withAiTimeout(AI_TIMEOUT_MS) { block(requestId) }
-        respond(result)
-        GatewayObservability.success(requestId, capability, result.model, started)
-    } catch (e: InvalidAiCapabilityException) {
-        GatewayObservability.failure(requestId, capability, "invalid_ai_response", started)
-        respond(HttpStatusCode.BadGateway, GatewayError("invalid_ai_response", "AI returned an invalid response", requestId))
-    } catch (e: IllegalArgumentException) {
-        GatewayObservability.failure(requestId, capability, "invalid_request", started)
-        respond(HttpStatusCode.BadRequest, GatewayError("invalid_request", e.message ?: "invalid request", requestId))
-    } catch (e: TimeoutCancellationException) {
-        GatewayObservability.failure(requestId, capability, "timeout", started)
-        respond(HttpStatusCode.GatewayTimeout, GatewayError("timeout", "AI operation timed out", requestId))
-    } catch (e: Exception) {
-        GatewayObservability.failure(requestId, capability, "ai_provider_error", started)
-        respond(HttpStatusCode.BadGateway, GatewayError("ai_provider_error", "AI provider unavailable", requestId))
-    }
+    security: GatewaySecurity,
+    block: suspend ApplicationCall.(String) -> AiCapabilityResponse,
+) = aiPost(
+    path = "/v1/ai/$capability",
+    security = security,
+    capability = capability,
+    invalidException = InvalidAiCapabilityException::class.java,
+) { requestId ->
+    val result = block(requestId)
+    AiRouteResult(result, result.model)
 }
 
-private val AI_TIMEOUT_MS: Long = System.getenv("AI_TIMEOUT_MS")?.toLongOrNull()?.coerceIn(1_000, 120_000) ?: 30_000
-private const val MAX_PROMPT_LENGTH = 12000
+private fun Route.aiPost(
+    path: String,
+    security: GatewaySecurity,
+    capability: String,
+    invalidException: Class<out Exception>? = null,
+    invalidError: (String) -> Any = { requestId ->
+        GatewayError(INVALID_AI_RESPONSE_CODE, INVALID_AI_RESPONSE_MESSAGE, requestId)
+    },
+    providerError: (String) -> Any = { requestId ->
+        GatewayError("ai_provider_error", AI_OPERATION_FAILED_MESSAGE, requestId)
+    },
+    block: suspend ApplicationCall.(String) -> AiRouteResult<*>,
+) = post(path) {
+    if (!security.requireAccess(call)) return@post
+    call.executeAiRoute(
+        capability = capability,
+        invalidException = invalidException,
+        invalidError = invalidError,
+        providerError = providerError,
+    ) { requestId -> block(requestId) }
+}
+
+private const val ORGANIZE_WEEK_CAPABILITY = "organize-week"
