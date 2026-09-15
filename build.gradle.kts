@@ -1,6 +1,6 @@
 plugins {
-    kotlin("jvm") version "2.4.20"
-    kotlin("plugin.serialization") version "2.4.20"
+    kotlin("jvm") version "2.4.10"
+    kotlin("plugin.serialization") version "2.4.10"
     id("io.ktor.plugin") version "3.5.2"
     id("org.jlleitschuh.gradle.ktlint") version "14.2.0"
     id("dev.detekt") version "2.0.0-alpha.6"
@@ -31,23 +31,6 @@ dependencies {
     implementation("ch.qos.logback:logback-classic:1.6.3")
     testImplementation("io.ktor:ktor-server-test-host-jvm")
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")
-}
-
-configurations.configureEach {
-    resolutionStrategy.eachDependency {
-        if (requested.group == "io.netty") {
-            useVersion("4.2.17.Final")
-            because("keep all Netty modules on a version containing current security fixes")
-        }
-        if (
-            requested.group == "com.fasterxml.jackson.core" ||
-            requested.group == "com.fasterxml.jackson.dataformat" ||
-            requested.group == "com.fasterxml.jackson.module"
-        ) {
-            useVersion("2.18.9")
-            because("keep Jackson modules on a version containing current security fixes")
-        }
-    }
 }
 
 kotlin {
@@ -106,7 +89,7 @@ tasks.jacocoTestCoverageVerification {
             limit {
                 counter = "LINE"
                 value = "COVEREDRATIO"
-                minimum = "0.80".toBigDecimal()
+                minimum = 0.80.toBigDecimal()
             }
         }
     }
