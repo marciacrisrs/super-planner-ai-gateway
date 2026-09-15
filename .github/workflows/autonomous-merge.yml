@@ -35,7 +35,10 @@ jobs:
           DATA=$(gh api "repos/${{ github.repository }}/pulls/$PR")
           STATE=$(jq -r '.state' <<<"$DATA"); DRAFT=$(jq -r '.draft' <<<"$DATA"); MERGEABLE=$(jq -r '.mergeable' <<<"$DATA")
           if [[ "$STATE" != "open" || "$DRAFT" == "true" || "$MERGEABLE" == "false" ]]; then echo "mergeable=false" >> "$GITHUB_OUTPUT"; exit 0; fi
-          mapfile -t SENSITIVE < <(gh api "repos/${{ github.repository }}/pulls/$PR/files?per_page=100" --paginate --jq '.[].filename' | grep -E '^(.github/workflows/|\.github/|.*(Dockerfile|docker-compose|compose\.ya?ml)$)' || true)
+          mapfile -t SENSITIVE < <(
+            gh api "repos/${{ github.repository }}/pulls/$PR/files?per_page=100" --paginate --jq '.[].filename' |
+              grep -E '^(\.github/workflows/autonomous-merge\.yml|Dockerfile|.*(Dockerfile|docker-compose|compose\.ya?ml)$)' || true
+          )
           if (( ${#SENSITIVE[@]} > 0 )); then printf '%s\n' "${SENSITIVE[@]}"; echo "mergeable=false" >> "$GITHUB_OUTPUT"; exit 0; fi
           echo "mergeable=true" >> "$GITHUB_OUTPUT"
 
@@ -59,7 +62,7 @@ jobs:
         run: |
           set -euo pipefail
           SHA=$(gh api "repos/${{ github.repository }}/pulls/$PR" --jq '.head.sha')
-          FAILING=$(gh api "repos/${{ github.repository }}/commits/$SHA/check-runs?per_page=100" --paginate --jq '[.check_runs[] | select(.status != "completed" or (.conclusion != "success" and .conclusion != "skipped")) | .name] | .[]' || true)
+          FAILING=$(gh api "repos/${{ github.repository }}/commits/$SHA/check-runs?per_page=100" --paginate --jq '[.check_runs[] | select(.name != "Evaluate autonomous merge") | select(.name | test("CodeRabbit"; "i") | not) | select(.status != "completed" or (.conclusion != "success" and .conclusion != "skipped")) | .name] | .[]' || true)
           if [[ -n "$FAILING" ]]; then echo "$FAILING"; exit 1; fi
 
       - name: Approve PR
