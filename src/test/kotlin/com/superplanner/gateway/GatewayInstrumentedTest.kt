@@ -223,7 +223,8 @@ class GatewayInstrumentedTest {
                   "logistics":[{
                     "type":"commute",
                     "minutes":45,
-                    "beforeItemId":"work"
+                    "origin":"home",
+                    "destination":"work"
                   }]
                 }
                 """.trimIndent()
