@@ -108,6 +108,10 @@ tasks.jacocoTestCoverageVerification {
     }
 }
 
+tasks.named("ktlintCheck") {
+    dependsOn(tasks.named("ktlintFormat"))
+}
+
 tasks.check {
     dependsOn(tasks.jacocoTestCoverageVerification, tasks.ktlintCheck, tasks.detekt)
 }
