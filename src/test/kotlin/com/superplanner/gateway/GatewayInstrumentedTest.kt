@@ -1,8 +1,8 @@
 package com.superplanner.gateway
 
+import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.post
-import io.ktor.client.request.get
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
@@ -239,7 +239,7 @@ class GatewayInstrumentedTest {
         assertEquals(1, decoded.summary.desiresConsidered)
         assertEquals(45, decoded.summary.commuteMinutesConsidered)
         assertEquals(listOf("work", "gym"), decoded.proposedItems.map { it.id }.sorted())
-        assertContains(ai.lastPrompt.orEmpty(), "COMMUTE")
+        assertContains(ai.lastPrompt.orEmpty(), "commute")
         assertContains(ai.lastPrompt.orEmpty(), "45")
         assertContains(ai.lastPrompt.orEmpty(), "America/Sao_Paulo")
     }
