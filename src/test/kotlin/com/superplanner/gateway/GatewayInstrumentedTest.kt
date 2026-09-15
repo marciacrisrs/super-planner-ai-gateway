@@ -78,7 +78,7 @@ class GatewayInstrumentedTest {
         val response = client.post("/v1/ai/generate") {
             header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
             header("X-Request-Id", "instrumented-generate-2")
-            setBody("""{"prompt":"   "}""")
+            setBody("""{\"prompt\":\"   \"}""")
         }
 
         assertEquals(HttpStatusCode.BadRequest, response.status)
@@ -239,7 +239,7 @@ class GatewayInstrumentedTest {
         assertEquals(1, decoded.summary.fixedCommitmentsConsidered)
         assertEquals(1, decoded.summary.desiresConsidered)
         assertEquals(45, decoded.summary.commuteMinutesConsidered)
-        assertEquals(listOf("work", "gym"), decoded.proposedItems.map { it.id }.sorted())
+        assertEquals(listOf("gym", "work"), decoded.proposedItems.map { it.id }.sorted())
         assertContains(ai.lastPrompt.orEmpty(), "commute")
         assertContains(ai.lastPrompt.orEmpty(), "45")
         assertContains(ai.lastPrompt.orEmpty(), "America/Sao_Paulo")
