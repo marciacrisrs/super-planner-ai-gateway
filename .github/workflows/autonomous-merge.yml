@@ -50,9 +50,12 @@ jobs:
           echo "head_sha=$HEAD_SHA" >> "$GITHUB_OUTPUT"
           echo "node_id=$NODE_ID" >> "$GITHUB_OUTPUT"
           [[ "$STATE" == "open" && "$DRAFT" == "false" && "$MERGEABLE" != "false" ]]
-          mapfile -t SENSITIVE < <(gh api "repos/${{ github.repository }}/pulls/$PR/files?per_page=100" --paginate --jq '.[].filename' | grep -E '^(.github/|.*(Dockerfile|docker-compose|compose\.ya?ml)$)' || true)
+          mapfile -t SENSITIVE < <(
+            gh api "repos/${{ github.repository }}/pulls/$PR/files?per_page=100" --paginate --jq '.[].filename' |
+              grep -E '^(\.github/workflows/autonomous-merge\.yml|Dockerfile|.*(Dockerfile|docker-compose|compose\.ya?ml)$)' || true
+          )
           if (( ${#SENSITIVE[@]} > 0 )); then
-            echo "Sensitive files changed; autonomous merge is disabled."
+            echo "Protected files changed; autonomous merge is disabled."
             printf '%s\n' "${SENSITIVE[@]}"
             exit 1
           fi

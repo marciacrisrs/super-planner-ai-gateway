@@ -26,14 +26,18 @@ class ContextualExplanationTest {
         )
 
         assertEquals("HIGH", response.result["confidence"]?.toString()?.trim('"'))
-        assertEquals("[\"$window\",\"$duration\"]", response.result["evidenceUsed"]?.toString())
+        val expectedEvidence = "[\"$window\",\"$duration\"]"
+        assertEquals(expectedEvidence, response.result["evidenceUsed"]?.toString())
     }
 
     @Test
     fun contextual_explanation_with_insufficient_evidence_requires_low_confidence() {
         val response = AiCapabilityService(
             FakeGenerator(
-                """{"explanation":"Não há informação suficiente para justificar a decisão.","evidenceUsed":[],"confidence":"LOW"}"""
+                """
+                {"explanation":"Não há informação suficiente para justificar a decisão.",
+                "evidenceUsed":[],"confidence":"LOW"}
+                """.trimIndent().replace("\n", "")
             )
         ).explanation(
             ExplanationRequest(
@@ -51,7 +55,10 @@ class ContextualExplanationTest {
     fun contextual_explanation_rejects_evidence_not_supplied_by_domain() {
         val supplied = "janela disponível: 30 minutos"
         val invented = "prioridade: alta"
-        val response = """{"explanation":"A atividade deve ser feita agora porque tem prioridade alta.","evidenceUsed":["$supplied","$invented"],"confidence":"HIGH"}"""
+        val response = """
+            {"explanation":"A atividade deve ser feita agora porque tem prioridade alta.",
+            "evidenceUsed":["$supplied","$invented"],"confidence":"HIGH"}
+        """.trimIndent().replace("\n", "")
 
         val exception = runCatching {
             AiCapabilityService(FakeGenerator(response)).explanation(
@@ -83,7 +90,8 @@ class ContextualExplanationTest {
         )
 
         assertEquals("MEDIUM", response.result["confidence"]?.toString()?.trim('"'))
-        assertEquals("[\"$first\",\"$second\"]", response.result["evidenceUsed"]?.toString())
+        val expectedEvidence = "[\"$first\",\"$second\"]"
+        assertEquals(expectedEvidence, response.result["evidenceUsed"]?.toString())
         assert(response.result["explanation"]?.toString()?.contains("conflito") == true)
     }
 }
