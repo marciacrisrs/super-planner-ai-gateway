@@ -84,7 +84,8 @@ class ContextualExplanationTest {
         )
 
         assertEquals("MEDIUM", response.result["confidence"]?.toString()?.trim('"'))
-        assertEquals("[\"$first\",\"$second\"]", response.result["evidenceUsed"]?.toString())
+        val expectedEvidence = "[\"$first\",\"$second\"]"
+        assertEquals(expectedEvidence, response.result["evidenceUsed"]?.toString())
         assert(response.result["explanation"]?.toString()?.contains("conflito") == true)
     }
 }
