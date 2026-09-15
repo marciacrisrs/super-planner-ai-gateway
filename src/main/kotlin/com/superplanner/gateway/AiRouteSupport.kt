@@ -19,14 +19,14 @@ internal suspend fun <T> ApplicationCall.executeAiRoute(
     providerError: (String) -> Any = { requestId ->
         GatewayError("ai_provider_error", AI_OPERATION_FAILED_MESSAGE, requestId)
     },
-    block: suspend () -> AiRouteResult<T>,
+    block: suspend (String) -> AiRouteResult<T>,
 ) {
     val requestId = GatewaySecurity.requestId(this)
     response.headers.append(GatewaySecurity.REQUEST_ID_HEADER, requestId)
     val started = System.nanoTime()
 
     try {
-        val result = withAiTimeout(AI_TIMEOUT_MS) { block() }
+        val result = withAiTimeout(AI_TIMEOUT_MS) { block(requestId) }
         respond(result.response)
         GatewayObservability.success(requestId, capability, result.model, started)
     } catch (e: Exception) {
@@ -76,6 +76,5 @@ internal const val INVALID_AI_RESPONSE_MESSAGE = "AI returned an invalid respons
 internal const val INVALID_REQUEST_MESSAGE = "invalid request"
 internal const val AI_TIMEOUT_MESSAGE = "AI operation timed out"
 internal const val AI_OPERATION_FAILED_MESSAGE = "AI operation failed"
-internal const val AI_PROVIDER_UNAVAILABLE_MESSAGE = "AI provider unavailable"
 private val AI_TIMEOUT_MS: Long = System.getenv("AI_TIMEOUT_MS")?.toLongOrNull()?.coerceIn(1_000, 120_000) ?: 30_000
 internal const val MAX_PROMPT_LENGTH = 12_000
