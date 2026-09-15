@@ -33,6 +33,19 @@ dependencies {
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")
 }
 
+configurations.configureEach {
+    resolutionStrategy.eachDependency {
+        if (requested.group == "io.netty") {
+            useVersion("4.2.17.Final")
+            because("keep all Netty modules on a version containing current security fixes")
+        }
+        if (requested.group == "com.fasterxml.jackson.core" || requested.group == "com.fasterxml.jackson.dataformat" || requested.group == "com.fasterxml.jackson.module") {
+            useVersion("2.18.8")
+            because("keep Jackson modules on a version containing current security fixes")
+        }
+    }
+}
+
 kotlin {
     jvmToolchain(21)
 }
