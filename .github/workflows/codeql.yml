@@ -47,7 +47,7 @@ jobs:
           queries: security-extended
 
       - name: Build for CodeQL
-        run: ./gradlew testClasses --no-daemon --stacktrace
+        run: gradle testClasses --no-daemon --stacktrace
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4
