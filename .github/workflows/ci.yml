@@ -34,6 +34,14 @@ jobs:
           GOOGLE_CLOUD_PROJECT: test-project
           GOOGLE_CLOUD_LOCATION: us-central1
           GEMINI_MODEL: test-model
+      - name: Analyze and publish coverage to SonarCloud
+        run: gradle sonar --no-daemon
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          ENVIRONMENT: test
+          GOOGLE_CLOUD_PROJECT: test-project
+          GOOGLE_CLOUD_LOCATION: us-central1
+          GEMINI_MODEL: test-model
 
   container:
     runs-on: ubuntu-latest
