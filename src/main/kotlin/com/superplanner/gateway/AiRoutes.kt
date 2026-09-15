@@ -1,6 +1,8 @@
 package com.superplanner.gateway
 
+import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.call
+import io.ktor.server.request.receive
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.post
 import kotlinx.serialization.Serializable
@@ -37,11 +39,14 @@ fun Route.aiRoutes(
             invalidError = { requestId ->
                 AiProposalError("invalid_ai_proposal", "AI proposal could not be validated", requestId)
             },
-            providerError = AiProposalError("ai_provider_error", "AI operation failed", GatewaySecurity.requestId(call)),
+            providerError = { requestId ->
+                AiProposalError("ai_provider_error", AI_OPERATION_FAILED_MESSAGE, requestId)
+            },
         ) {
             val request = call.receive<AiProposalRequest>()
             require(request.message.length <= MAX_PROMPT_LENGTH) { "message exceeds maximum length" }
-            val response = aiProposalService.propose(request, GatewaySecurity.requestId(call))
+            val requestId = GatewaySecurity.requestId(call)
+            val response = aiProposalService.propose(request, requestId)
             AiRouteResult(response, response.model)
         }
     }
@@ -61,54 +66,58 @@ fun Route.aiRoutes(
     }
 
     post("/v1/ai/natural-language") {
-        capabilityRoute(security, "natural-language") {
+        if (!security.requireAccess(call)) return@post
+        call.capabilityRoute(security, "natural-language") {
             capabilityService.naturalLanguage(call.receive<NaturalLanguageRequest>(), it)
         }
     }
     post("/v1/ai/explain") {
-        capabilityRoute(security, "explain") {
+        if (!security.requireAccess(call)) return@post
+        call.capabilityRoute(security, "explain") {
             capabilityService.explanation(call.receive<ExplanationRequest>(), it)
         }
     }
     post("/v1/ai/command") {
-        capabilityRoute(security, "command") {
+        if (!security.requireAccess(call)) return@post
+        call.capabilityRoute(security, "command") {
             capabilityService.command(call.receive<CommandRequest>(), it)
         }
     }
     post("/v1/ai/insights") {
-        capabilityRoute(security, "insights") {
+        if (!security.requireAccess(call)) return@post
+        call.capabilityRoute(security, "insights") {
             capabilityService.insight(call.receive<InsightRequest>(), it)
         }
     }
     post("/v1/ai/preferences") {
-        capabilityRoute(security, "preferences") {
+        if (!security.requireAccess(call)) return@post
+        call.capabilityRoute(security, "preferences") {
             capabilityService.preference(call.receive<PreferenceRequest>(), it)
         }
     }
     post("/v1/ai/scenario") {
-        capabilityRoute(security, "scenario") {
+        if (!security.requireAccess(call)) return@post
+        call.capabilityRoute(security, "scenario") {
             capabilityService.scenario(call.receive<ScenarioRequest>(), it)
         }
     }
     post("/v1/ai/next-action") {
-        capabilityRoute(security, "next-action") {
+        if (!security.requireAccess(call)) return@post
+        call.capabilityRoute(security, "next-action") {
             capabilityService.nextAction(call.receive<NextActionRequest>(), it)
         }
     }
 }
 
-private fun Route.capabilityRoute(
+private suspend fun ApplicationCall.capabilityRoute(
     security: GatewaySecurity,
     capability: String,
     block: suspend (String) -> AiCapabilityResponse,
 ) {
-    post { path ->
-        if (!security.requireAccess(call)) return@post
-        call.executeAiRoute(capability, InvalidAiCapabilityException::class.java) {
-            val requestId = GatewaySecurity.requestId(call)
-            val result = block(requestId)
-            AiRouteResult(result, result.model)
-        }
+    executeAiRoute(capability, InvalidAiCapabilityException::class.java) {
+        val requestId = GatewaySecurity.requestId(this)
+        val result = block(requestId)
+        AiRouteResult(result, result.model)
     }
 }
 
