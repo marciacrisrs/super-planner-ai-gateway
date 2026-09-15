@@ -1,8 +1,8 @@
 package com.superplanner.gateway
 
+import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.post
-import io.ktor.client.request.get
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
@@ -23,7 +23,7 @@ class GatewayInstrumentedTest {
         application {
             module(
                 GatewayDependencies(
-                    aiTextGenerator = RecordingAi(successfulGenerateResponse),
+                    aiTextGenerator = RecordingAi(SUCCESSFUL_GENERATE_RESPONSE),
                     security = GatewaySecurity(environment = "test"),
                 )
             )
@@ -114,7 +114,7 @@ class GatewayInstrumentedTest {
 
     @Test
     fun `production security rejects missing and invalid credentials before provider execution`() = testApplication {
-        val ai = RecordingAi(successfulGenerateResponse)
+        val ai = RecordingAi(SUCCESSFUL_GENERATE_RESPONSE)
         application {
             module(
                 GatewayDependencies(
@@ -151,7 +151,7 @@ class GatewayInstrumentedTest {
 
     @Test
     fun `production security applies rate limit to authenticated provider calls`() = testApplication {
-        val ai = RecordingAi(successfulGenerateResponse)
+        val ai = RecordingAi(SUCCESSFUL_GENERATE_RESPONSE)
         val limiter = RateLimiter(maxRequests = 1, windowMillis = 60_000)
         application {
             module(
@@ -161,7 +161,7 @@ class GatewayInstrumentedTest {
                         expectedApiKey = "integration-secret",
                         environment = "production",
                         rateLimiter = limiter,
-                    ),
+                    )
                 )
             )
         }
@@ -188,7 +188,7 @@ class GatewayInstrumentedTest {
 
     @Test
     fun `organize-week integration preserves structured contract from provider through HTTP`() = testApplication {
-        val ai = RecordingAi(organizeWeekResponse)
+        val ai = RecordingAi(ORGANIZE_WEEK_RESPONSE)
         application {
             module(
                 GatewayDependencies(
@@ -223,7 +223,8 @@ class GatewayInstrumentedTest {
                   "logistics":[{
                     "type":"commute",
                     "minutes":45,
-                    "beforeItemId":"work"
+                    "origin":"home",
+                    "destination":"work"
                   }]
                 }
                 """.trimIndent()
@@ -238,8 +239,8 @@ class GatewayInstrumentedTest {
         assertEquals(1, decoded.summary.fixedCommitmentsConsidered)
         assertEquals(1, decoded.summary.desiresConsidered)
         assertEquals(45, decoded.summary.commuteMinutesConsidered)
-        assertEquals(listOf("work", "gym"), decoded.proposedItems.map { it.id }.sorted())
-        assertContains(ai.lastPrompt.orEmpty(), "COMMUTE")
+        assertEquals(listOf("gym", "work"), decoded.proposedItems.map { it.id }.sorted())
+        assertContains(ai.lastPrompt.orEmpty(), "commute")
         assertContains(ai.lastPrompt.orEmpty(), "45")
         assertContains(ai.lastPrompt.orEmpty(), "America/Sao_Paulo")
     }
@@ -265,9 +266,9 @@ class GatewayInstrumentedTest {
     }
 
     companion object {
-        private const val successfulGenerateResponse = "generated answer"
+        private const val SUCCESSFUL_GENERATE_RESPONSE = "generated answer"
 
-        private val organizeWeekResponse =
+        private val ORGANIZE_WEEK_RESPONSE =
             """
             {
               "summary": {

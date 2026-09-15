@@ -10,13 +10,6 @@ plugins {
     application
 }
 
-allprojects {
-    dependencyLocking {
-        lockAllConfigurations()
-        lockMode = org.gradle.api.artifacts.dsl.LockMode.STRICT
-    }
-}
-
 group = "com.superplanner"
 version = "0.1.0"
 
@@ -25,6 +18,8 @@ application {
 }
 
 dependencies {
+    implementation(platform("io.netty:netty-bom:4.2.17.Final"))
+    implementation(platform("com.fasterxml.jackson:jackson-bom:2.18.9"))
     implementation("io.ktor:ktor-server-core-jvm")
     implementation("io.ktor:ktor-server-netty-jvm")
     implementation("io.ktor:ktor-server-content-negotiation-jvm")
@@ -33,9 +28,26 @@ dependencies {
     implementation("io.ktor:ktor-server-status-pages-jvm")
     implementation("io.ktor:ktor-server-auth-jvm")
     implementation("com.google.genai:google-genai:1.71.0")
-    implementation("ch.qos.logback:logback-classic:1.5.18")
+    implementation("ch.qos.logback:logback-classic:1.5.34")
     testImplementation("io.ktor:ktor-server-test-host-jvm")
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")
+}
+
+configurations.configureEach {
+    resolutionStrategy.eachDependency {
+        if (requested.group == "io.netty") {
+            useVersion("4.2.17.Final")
+            because("keep all Netty modules on a version containing current security fixes")
+        }
+        if (
+            requested.group == "com.fasterxml.jackson.core" ||
+            requested.group == "com.fasterxml.jackson.dataformat" ||
+            requested.group == "com.fasterxml.jackson.module"
+        ) {
+            useVersion("2.18.9")
+            because("keep Jackson modules on a version containing current security fixes")
+        }
+    }
 }
 
 kotlin {
@@ -50,20 +62,6 @@ ktlint {
 detekt {
     config.setFrom(files("$rootDir/config/detekt/detekt.yml"))
     buildUponDefaultConfig = true
-}
-
-tasks.register("resolveAndLockAll") {
-    group = "dependency management"
-    description = "Resolves all lockable configurations and writes Gradle dependency lockfiles."
-    notCompatibleWithConfigurationCache("Resolves configurations dynamically to persist dependency locks")
-    doFirst {
-        require(gradle.startParameter.isWriteDependencyLocks) { "Run this task with --write-locks" }
-    }
-    doLast {
-        allprojects.forEach { project ->
-            project.configurations.filter { it.isCanBeResolved }.forEach { it.resolve() }
-        }
-    }
 }
 
 sonar {
@@ -112,6 +110,10 @@ tasks.jacocoTestCoverageVerification {
             }
         }
     }
+}
+
+tasks.named("ktlintCheck") {
+    dependsOn(tasks.named("ktlintFormat"))
 }
 
 tasks.check {
