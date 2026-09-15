@@ -12,16 +12,31 @@ class GatewaySecurity(
     suspend fun requireAccess(call: ApplicationCall): Boolean {
         if (environment == "test") return true
         if (expectedApiKey.isBlank()) {
-            call.respond(HttpStatusCode.ServiceUnavailable, GatewayError("gateway_not_configured", "Gateway authentication is not configured", requestId(call)))
+            val requestId = requestId(call)
+            call.response.headers.append("X-Request-Id", requestId)
+            call.respond(
+                HttpStatusCode.ServiceUnavailable,
+                GatewayError("gateway_not_configured", "Gateway authentication is not configured", requestId),
+            )
             return false
         }
         val supplied = call.request.headers["X-Gateway-Api-Key"]?.trim()
         if (!credentialsMatch(supplied)) {
-            call.respond(HttpStatusCode.Unauthorized, GatewayError("unauthorized", "Invalid gateway credentials", requestId(call)))
+            val requestId = requestId(call)
+            call.response.headers.append("X-Request-Id", requestId)
+            call.respond(
+                HttpStatusCode.Unauthorized,
+                GatewayError("unauthorized", "Invalid gateway credentials", requestId),
+            )
             return false
         }
         if (!rateLimiter.allow(supplied!!)) {
-            call.respond(HttpStatusCode.TooManyRequests, GatewayError("rate_limited", "Too many requests", requestId(call)))
+            val requestId = requestId(call)
+            call.response.headers.append("X-Request-Id", requestId)
+            call.respond(
+                HttpStatusCode.TooManyRequests,
+                GatewayError("rate_limited", "Too many requests", requestId),
+            )
             return false
         }
         return true

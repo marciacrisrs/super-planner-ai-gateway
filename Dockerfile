@@ -3,8 +3,9 @@ WORKDIR /workspace
 COPY . .
 RUN gradle installDist --no-daemon
 
-FROM eclipse-temurin:21-jre
+FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
+RUN apk upgrade --no-cache
 COPY --from=build /workspace/build/install/super-planner-ai-gateway/ ./
 ENV PORT=8080
 EXPOSE 8080
