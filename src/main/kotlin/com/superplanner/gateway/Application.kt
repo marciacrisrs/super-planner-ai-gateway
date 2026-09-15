@@ -1,7 +1,8 @@
 package com.superplanner.gateway
 
 import io.ktor.http.HttpStatusCode
-import io.ktor.server.application.*
+import io.ktor.server.application.Application
+import io.ktor.server.application.install
 import io.ktor.server.plugins.calllogging.CallLogging
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.server.plugins.statuspages.StatusPages
@@ -29,7 +30,10 @@ fun Application.module(dependencies: GatewayDependencies = productionGatewayDepe
         exception<Throwable> { call, cause ->
             val requestId = GatewaySecurity.requestId(call)
             GatewayObservability.failure(requestId, "unhandled", cause::class.simpleName ?: "error")
-            call.respond(HttpStatusCode.InternalServerError, GatewayError("internal_error", "Internal server error", requestId))
+            call.respond(
+                HttpStatusCode.InternalServerError,
+                GatewayError("internal_error", "Internal server error", requestId),
+            )
         }
     }
     install(ContentNegotiation) {
