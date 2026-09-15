@@ -4,6 +4,7 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.Application
 import io.ktor.server.application.install
 import io.ktor.server.plugins.calllogging.CallLogging
+import io.ktor.server.plugins.defaultheaders.DefaultHeaders
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.server.plugins.statuspages.StatusPages
 import io.ktor.server.response.respond
@@ -26,6 +27,12 @@ fun Application.module(dependencies: GatewayDependencies = productionGatewayDepe
     val configurationReady = gatewayConfigurationReady()
 
     install(CallLogging)
+    install(DefaultHeaders) {
+        header("X-Content-Type-Options", "nosniff")
+        header("X-Frame-Options", "DENY")
+        header("Referrer-Policy", "no-referrer")
+        header("Cache-Control", "no-store")
+    }
     install(StatusPages) {
         exception<Throwable> { call, cause ->
             val requestId = GatewaySecurity.requestId(call)
