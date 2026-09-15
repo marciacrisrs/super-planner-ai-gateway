@@ -23,7 +23,7 @@ class GatewayInstrumentedTest {
         application {
             module(
                 GatewayDependencies(
-                    aiTextGenerator = RecordingAi(successfulGenerateResponse),
+                    aiTextGenerator = RecordingAi(SUCCESSFUL_GENERATE_RESPONSE),
                     security = GatewaySecurity(environment = "test"),
                 )
             )
@@ -114,7 +114,7 @@ class GatewayInstrumentedTest {
 
     @Test
     fun `production security rejects missing and invalid credentials before provider execution`() = testApplication {
-        val ai = RecordingAi(successfulGenerateResponse)
+        val ai = RecordingAi(SUCCESSFUL_GENERATE_RESPONSE)
         application {
             module(
                 GatewayDependencies(
@@ -151,7 +151,7 @@ class GatewayInstrumentedTest {
 
     @Test
     fun `production security applies rate limit to authenticated provider calls`() = testApplication {
-        val ai = RecordingAi(successfulGenerateResponse)
+        val ai = RecordingAi(SUCCESSFUL_GENERATE_RESPONSE)
         val limiter = RateLimiter(maxRequests = 1, windowMillis = 60_000)
         application {
             module(
@@ -161,7 +161,7 @@ class GatewayInstrumentedTest {
                         expectedApiKey = "integration-secret",
                         environment = "production",
                         rateLimiter = limiter,
-                    ),
+                    )
                 )
             )
         }
@@ -188,7 +188,7 @@ class GatewayInstrumentedTest {
 
     @Test
     fun `organize-week integration preserves structured contract from provider through HTTP`() = testApplication {
-        val ai = RecordingAi(organizeWeekResponse)
+        val ai = RecordingAi(ORGANIZE_WEEK_RESPONSE)
         application {
             module(
                 GatewayDependencies(
@@ -265,9 +265,9 @@ class GatewayInstrumentedTest {
     }
 
     companion object {
-        private const val successfulGenerateResponse = "generated answer"
+        private const val SUCCESSFUL_GENERATE_RESPONSE = "generated answer"
 
-        private val organizeWeekResponse =
+        private val ORGANIZE_WEEK_RESPONSE =
             """
             {
               "summary": {
