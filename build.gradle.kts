@@ -19,7 +19,7 @@ application {
 
 dependencies {
     implementation(platform("io.netty:netty-bom:4.2.17.Final"))
-    implementation(platform("com.fasterxml.jackson:jackson-bom:2.18.8"))
+    implementation(platform("com.fasterxml.jackson:jackson-bom:2.18.9"))
     implementation("io.ktor:ktor-server-core-jvm")
     implementation("io.ktor:ktor-server-netty-jvm")
     implementation("io.ktor:ktor-server-content-negotiation-jvm")
@@ -39,8 +39,12 @@ configurations.configureEach {
             useVersion("4.2.17.Final")
             because("keep all Netty modules on a version containing current security fixes")
         }
-        if (requested.group == "com.fasterxml.jackson.core" || requested.group == "com.fasterxml.jackson.dataformat" || requested.group == "com.fasterxml.jackson.module") {
-            useVersion("2.18.8")
+        if (
+            requested.group == "com.fasterxml.jackson.core" ||
+            requested.group == "com.fasterxml.jackson.dataformat" ||
+            requested.group == "com.fasterxml.jackson.module"
+        ) {
+            useVersion("2.18.9")
             because("keep Jackson modules on a version containing current security fixes")
         }
     }
