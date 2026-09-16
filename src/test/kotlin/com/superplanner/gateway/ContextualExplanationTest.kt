@@ -60,7 +60,7 @@ class ContextualExplanationTest {
             "evidenceUsed":["$supplied","$invented"],"confidence":"HIGH"}
         """.trimIndent().replace("\n", "")
 
-        val exception = runCatching {
+        val exception = runCatching<Unit> {
             AiCapabilityService(FakeGenerator(response)).explanation(
                 ExplanationRequest(
                     question = "Por que esta é a próxima atividade?",
