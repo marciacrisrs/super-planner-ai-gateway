@@ -6,11 +6,11 @@ on:
   pull_request_review:
     types: [submitted, dismissed]
   workflow_run:
-    workflows: ["CI"]
+    workflows: ["CI", "CodeQL", "Dependency Review", "SBOM", "Container Scanning"]
     types: [completed]
 
 permissions:
-  contents: read
+  contents: write
   pull-requests: write
   checks: read
 
@@ -29,7 +29,11 @@ jobs:
           WORKFLOW_PR: ${{ github.event.workflow_run.pull_requests[0].number }}
         run: |
           set -euo pipefail
-          if [[ "$EVENT_NAME" == "workflow_run" ]]; then PR="${WORKFLOW_PR:-}"; else PR="${EVENT_PR:-}"; fi
+          if [[ "$EVENT_NAME" == "workflow_run" ]]; then
+            PR="${WORKFLOW_PR:-}"
+          else
+            PR="${EVENT_PR:-}"
+          fi
           [[ -z "$PR" ]] && { echo "No pull request associated with this event."; exit 0; }
           echo "pr=$PR" >> "$GITHUB_OUTPUT"
 
@@ -46,13 +50,14 @@ jobs:
           DRAFT=$(jq -r '.draft' <<<"$DATA")
           MERGEABLE=$(jq -r '.mergeable' <<<"$DATA")
           HEAD_SHA=$(jq -r '.head.sha' <<<"$DATA")
-          NODE_ID=$(jq -r '.node_id' <<<"$DATA")
           echo "head_sha=$HEAD_SHA" >> "$GITHUB_OUTPUT"
-          echo "node_id=$NODE_ID" >> "$GITHUB_OUTPUT"
           [[ "$STATE" == "open" && "$DRAFT" == "false" && "$MERGEABLE" != "false" ]]
-          mapfile -t SENSITIVE < <(gh api "repos/${{ github.repository }}/pulls/$PR/files?per_page=100" --paginate --jq '.[].filename' | grep -E '^(.github/|.*(Dockerfile|docker-compose|compose\.ya?ml)$)' || true)
+          mapfile -t SENSITIVE < <(
+            gh api "repos/${{ github.repository }}/pulls/$PR/files?per_page=100" --paginate --jq '.[].filename' |
+              grep -E '^(.github/workflows/autonomous-merge\.yml|Dockerfile|.*(Dockerfile|docker-compose|compose\.ya?ml)$)' || true
+          )
           if (( ${#SENSITIVE[@]} > 0 )); then
-            echo "Sensitive files changed; autonomous merge is disabled."
+            echo "Protected files changed; autonomous merge is disabled."
             printf '%s\n' "${SENSITIVE[@]}"
             exit 1
           fi
@@ -89,9 +94,7 @@ jobs:
         if: steps.inspect.outcome == 'success'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NODE_ID: ${{ steps.inspect.outputs.node_id }}
+          PR: ${{ steps.pr.outputs.pr }}
         run: |
           set -euo pipefail
-          gh api graphql \
-            -f query='mutation($pr:ID!){enablePullRequestAutoMerge(input:{pullRequestId:$pr,mergeMethod:SQUASH}){pullRequest{autoMergeRequest{enabledAt}}}}' \
-            -F pr="$PR_NODE_ID"
+          gh pr merge "$PR" --repo "${{ github.repository }}" --auto --squash --delete-branch=false
