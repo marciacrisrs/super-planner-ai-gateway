@@ -29,73 +29,63 @@ fun Route.aiRoutes(
     registerCapabilityRoutes(capabilityService, security)
 }
 
-private fun Route.registerGenerateRoute(
-    generator: AiTextGenerator,
-    security: GatewaySecurity,
-) {
+private fun Route.registerGenerateRoute(generator: AiTextGenerator, security: GatewaySecurity) {
     post("/v1/ai/generate") {
         if (!security.requireAccess(call)) return@post
         handleGenerate(call, generator)
     }
 }
 
-private fun Route.registerProposeRoute(
-    service: AiProposalService,
-    security: GatewaySecurity,
-) {
+private fun Route.registerProposeRoute(service: AiProposalService, security: GatewaySecurity) {
     post("/v1/ai/propose") {
         if (!security.requireAccess(call)) return@post
         handlePropose(call, service)
     }
 }
 
-private fun Route.registerOrganizeWeekRoute(
-    service: OrganizeWeekService,
-    security: GatewaySecurity,
-) {
+private fun Route.registerOrganizeWeekRoute(service: OrganizeWeekService, security: GatewaySecurity) {
     post("/v1/ai/organize-week") {
         if (!security.requireAccess(call)) return@post
         handleOrganizeWeek(call, service)
     }
 }
 
-private fun Route.registerCapabilityRoutes(
-    service: AiCapabilityService,
-    security: GatewaySecurity,
-) {
-    registerCapabilityRoute("natural-language", security) { id ->
-        service.naturalLanguage(call.receive<NaturalLanguageRequest>(), id)
+private fun Route.registerCapabilityRoutes(service: AiCapabilityService, security: GatewaySecurity) {
+    registerCapabilityRoute("natural-language", security) { id, request ->
+        service.naturalLanguage(request, id)
     }
-    registerCapabilityRoute("explain", security) { id ->
-        service.explanation(call.receive<ExplanationRequest>(), id)
+    registerCapabilityRoute("explain", security) { id, request ->
+        service.explanation(request, id)
     }
-    registerCapabilityRoute("command", security) { id ->
-        service.command(call.receive<CommandRequest>(), id)
+    registerCapabilityRoute("command", security) { id, request ->
+        service.command(request, id)
     }
-    registerCapabilityRoute("insights", security) { id ->
-        service.insight(call.receive<InsightRequest>(), id)
+    registerCapabilityRoute("insights", security) { id, request ->
+        service.insight(request, id)
     }
-    registerCapabilityRoute("preferences", security) { id ->
-        service.preference(call.receive<PreferenceRequest>(), id)
+    registerCapabilityRoute("preferences", security) { id, request ->
+        service.preference(request, id)
     }
-    registerCapabilityRoute("scenario", security) { id ->
-        service.scenario(call.receive<ScenarioRequest>(), id)
+    registerCapabilityRoute("scenario", security) { id, request ->
+        service.scenario(request, id)
     }
-    registerCapabilityRoute("next-action", security) { id ->
-        service.nextAction(call.receive<NextActionRequest>(), id)
+    registerCapabilityRoute("next-action", security) { id, request ->
+        service.nextAction(request, id)
     }
 }
 
 private fun Route.registerCapabilityRoute(
     capability: String,
     security: GatewaySecurity,
-    block: suspend ApplicationCall.(String) -> AiCapabilityResponse,
+    block: suspend (String, AiCapabilityRequest) -> AiCapabilityResponse,
 ) {
     post("/v1/ai/$capability") {
         if (!security.requireAccess(call)) return@post
         val requestId = prepareRequest(call)
         executeCapability(call, requestId, capability) {
-            withAiTimeout(AI_TIMEOUT_MS) { block(call, requestId) }
+            withAiTimeout(AI_TIMEOUT_MS) {
+                block(requestId, call.receive<AiCapabilityRequest>())
+            }
         }
     }
 }
@@ -145,69 +135,21 @@ private suspend fun <T : Any> executeCapability(
     val started = System.nanoTime()
     try {
         val result = block()
-        call.respond(result)
+        call.respond(result as Any)
         val resultModel = (result as? AiCapabilityResponse)?.model ?: model
         GatewayObservability.success(requestId, capability, resultModel, started)
     } catch (e: InvalidAiProposalException) {
-        failure(
-            call,
-            requestId,
-            capability,
-            "invalid_ai_proposal",
-            started,
-            HttpStatusCode.BadGateway,
-            "AI proposal could not be validated",
-        )
+        failure(call, requestId, capability, "invalid_ai_proposal", started, HttpStatusCode.BadGateway, "AI proposal could not be validated")
     } catch (e: InvalidOrganizeWeekException) {
-        failure(
-            call,
-            requestId,
-            capability,
-            "invalid_ai_response",
-            started,
-            HttpStatusCode.BadGateway,
-            "AI returned an invalid organize-week response",
-        )
+        failure(call, requestId, capability, "invalid_ai_response", started, HttpStatusCode.BadGateway, "AI returned an invalid organize-week response")
     } catch (e: InvalidAiCapabilityException) {
-        failure(
-            call,
-            requestId,
-            capability,
-            "invalid_ai_response",
-            started,
-            HttpStatusCode.BadGateway,
-            "AI returned an invalid response",
-        )
+        failure(call, requestId, capability, "invalid_ai_response", started, HttpStatusCode.BadGateway, "AI returned an invalid response")
     } catch (e: IllegalArgumentException) {
-        failure(
-            call,
-            requestId,
-            capability,
-            "invalid_request",
-            started,
-            HttpStatusCode.BadRequest,
-            e.message ?: "invalid request",
-        )
+        failure(call, requestId, capability, "invalid_request", started, HttpStatusCode.BadRequest, e.message ?: "invalid request")
     } catch (e: TimeoutCancellationException) {
-        failure(
-            call,
-            requestId,
-            capability,
-            "timeout",
-            started,
-            HttpStatusCode.GatewayTimeout,
-            "AI operation timed out",
-        )
+        failure(call, requestId, capability, "timeout", started, HttpStatusCode.GatewayTimeout, "AI operation timed out")
     } catch (e: Exception) {
-        failure(
-            call,
-            requestId,
-            capability,
-            "ai_provider_error",
-            started,
-            HttpStatusCode.BadGateway,
-            "AI provider unavailable",
-        )
+        failure(call, requestId, capability, "ai_provider_error", started, HttpStatusCode.BadGateway, "AI provider unavailable")
     }
 }
 
@@ -221,7 +163,7 @@ private suspend fun failure(
     message: String,
 ) {
     GatewayObservability.failure(requestId, capability, reason, started)
-    call.respond(status, ErrorResponse(message))
+    call.respond(status, GatewayError(reason, message, requestId))
 }
 
 private const val MAX_PROMPT_LENGTH = 12_000
