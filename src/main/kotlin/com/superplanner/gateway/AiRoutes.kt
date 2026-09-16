@@ -76,14 +76,16 @@ private fun prepareRequest(call: ApplicationCall): String {
     return requestId
 }
 
-private suspend fun ApplicationCall.capabilityRoute(
+private fun Route.capabilityRoute(
     capability: String,
     security: GatewaySecurity,
     block: suspend ApplicationCall.(String) -> AiCapabilityResponse,
 ) {
-    if (!security.requireAccess(this)) return
-    val requestId = prepareRequest(this)
-    executeCapability(this, requestId, capability) { block(requestId) }
+    post("/v1/ai/capabilities/$capability") {
+        if (!security.requireAccess(call)) return@post
+        val requestId = prepareRequest(call)
+        executeCapability(this, requestId, capability) { block(this, requestId) }
+    }
 }
 
 private suspend fun <T> executeCapability(
