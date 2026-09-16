@@ -53,5 +53,7 @@ object GatewayObservability {
     }
 
     private fun elapsedMs(startedNanos: Long): Long =
-        ((System.nanoTime() - startedNanos) / 1_000_000.0).roundToLong()
+        ((System.nanoTime() - startedNanos) / NANOS_PER_MILLISECOND).roundToLong()
+
+    private const val NANOS_PER_MILLISECOND = 1_000_000.0
 }
