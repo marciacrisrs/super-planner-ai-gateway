@@ -51,41 +51,39 @@ private fun Route.registerOrganizeWeekRoute(service: OrganizeWeekService, securi
 }
 
 private fun Route.registerCapabilityRoutes(service: AiCapabilityService, security: GatewaySecurity) {
-    registerCapabilityRoute("natural-language", security) { id, request ->
-        service.naturalLanguage(request, id)
+    registerCapabilityRoute("natural-language", security) { requestId, request ->
+        service.naturalLanguage(request.receive<NaturalLanguageRequest>(), requestId)
     }
-    registerCapabilityRoute("explain", security) { id, request ->
-        service.explanation(request, id)
+    registerCapabilityRoute("explain", security) { requestId, request ->
+        service.explanation(request.receive<ExplanationRequest>(), requestId)
     }
-    registerCapabilityRoute("command", security) { id, request ->
-        service.command(request, id)
+    registerCapabilityRoute("command", security) { requestId, request ->
+        service.command(request.receive<CommandRequest>(), requestId)
     }
-    registerCapabilityRoute("insights", security) { id, request ->
-        service.insight(request, id)
+    registerCapabilityRoute("insights", security) { requestId, request ->
+        service.insight(request.receive<InsightRequest>(), requestId)
     }
-    registerCapabilityRoute("preferences", security) { id, request ->
-        service.preference(request, id)
+    registerCapabilityRoute("preferences", security) { requestId, request ->
+        service.preference(request.receive<PreferenceRequest>(), requestId)
     }
-    registerCapabilityRoute("scenario", security) { id, request ->
-        service.scenario(request, id)
+    registerCapabilityRoute("scenario", security) { requestId, request ->
+        service.scenario(request.receive<ScenarioRequest>(), requestId)
     }
-    registerCapabilityRoute("next-action", security) { id, request ->
-        service.nextAction(request, id)
+    registerCapabilityRoute("next-action", security) { requestId, request ->
+        service.nextAction(request.receive<NextActionRequest>(), requestId)
     }
 }
 
 private fun Route.registerCapabilityRoute(
     capability: String,
     security: GatewaySecurity,
-    block: suspend (String, AiCapabilityRequest) -> AiCapabilityResponse,
+    block: suspend (String, ApplicationCall) -> AiCapabilityResponse,
 ) {
     post("/v1/ai/$capability") {
         if (!security.requireAccess(call)) return@post
         val requestId = prepareRequest(call)
         executeCapability(call, requestId, capability) {
-            withAiTimeout(AI_TIMEOUT_MS) {
-                block(requestId, call.receive<AiCapabilityRequest>())
-            }
+            withAiTimeout(AI_TIMEOUT_MS) { block(requestId, call) }
         }
     }
 }
