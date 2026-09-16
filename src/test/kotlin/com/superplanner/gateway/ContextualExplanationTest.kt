@@ -2,6 +2,7 @@ package com.superplanner.gateway
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 
 class ContextualExplanationTest {
     private class FakeGenerator(private val response: String) : AiTextGenerator {
@@ -60,7 +61,7 @@ class ContextualExplanationTest {
             "evidenceUsed":["$supplied","$invented"],"confidence":"HIGH"}
         """.trimIndent().replace("\n", "")
 
-        val exception = runCatching<Unit> {
+        val exception = assertFailsWith<InvalidAiCapabilityException> {
             AiCapabilityService(FakeGenerator(response)).explanation(
                 ExplanationRequest(
                     question = "Por que esta é a próxima atividade?",
@@ -68,9 +69,9 @@ class ContextualExplanationTest {
                 ),
                 "req-explanation-ungrounded",
             )
-        }.exceptionOrNull()
+        }
 
-        assertEquals(InvalidAiCapabilityException::class, exception?.javaClass)
+        assertEquals(InvalidAiCapabilityException::class, exception::class)
     }
 
     @Test
