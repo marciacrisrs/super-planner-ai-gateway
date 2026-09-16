@@ -135,7 +135,7 @@ private fun prepareRequest(call: ApplicationCall): String {
     return requestId
 }
 
-private suspend fun <T> executeCapability(
+private suspend fun <T : Any> executeCapability(
     call: ApplicationCall,
     requestId: String,
     capability: String,
@@ -215,15 +215,17 @@ private suspend fun failure(
     call: ApplicationCall,
     requestId: String,
     capability: String,
-    error: String,
+    reason: String,
     started: Long,
     status: HttpStatusCode,
     message: String,
 ) {
-    GatewayObservability.failure(requestId, capability, error, started)
-    call.respond(status, GatewayError(error, message, requestId))
+    GatewayObservability.failure(requestId, capability, reason, started)
+    call.respond(status, ErrorResponse(message))
 }
 
-private val AI_TIMEOUT_MS: Long =
-    System.getenv("AI_TIMEOUT_MS")?.toLongOrNull()?.coerceIn(1_000, 120_000) ?: 30_000
-private const val MAX_PROMPT_LENGTH = 12000
+private const val MAX_PROMPT_LENGTH = 12_000
+private val AI_TIMEOUT_MS: Long = System.getenv("AI_TIMEOUT_MS")
+    ?.toLongOrNull()
+    ?.coerceIn(1_000, 120_000)
+    ?: 30_000
