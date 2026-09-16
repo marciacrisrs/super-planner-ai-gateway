@@ -4,8 +4,9 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 
 class RateLimiter(
-    private val maxRequests: Long = System.getenv("GATEWAY_RATE_LIMIT")?.toLongOrNull()?.coerceAtLeast(1) ?: 60,
-    private val windowMillis: Long = 60_000,
+    private val maxRequests: Long =
+        System.getenv("GATEWAY_RATE_LIMIT")?.toLongOrNull()?.coerceAtLeast(1) ?: 60,
+    private val windowMillis: Long = DEFAULT_WINDOW_MILLIS,
 ) {
     private data class Window(val startedAt: AtomicLong, val count: AtomicLong)
     private val windows = ConcurrentHashMap<String, Window>()
@@ -22,5 +23,9 @@ class RateLimiter(
             }
         }
         return window.count.incrementAndGet() <= maxRequests
+    }
+
+    private companion object {
+        const val DEFAULT_WINDOW_MILLIS = 60_000L
     }
 }
