@@ -94,8 +94,8 @@ private fun Route.registerCapabilityRoute(
     post("/v1/ai/$capability") {
         if (!security.requireAccess(call)) return@post
         val requestId = prepareRequest(call)
-        executeCapability(this, requestId, capability) {
-            withAiTimeout(AI_TIMEOUT_MS) { block(this, requestId) }
+        executeCapability(call, requestId, capability) {
+            withAiTimeout(AI_TIMEOUT_MS) { block(call, requestId) }
         }
     }
 }
